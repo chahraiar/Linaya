@@ -1,0 +1,38 @@
+{
+  "common": {
+    "save": "Save",
+    "cancel": "Cancel",
+    "delete": "Delete",
+    "edit": "Edit",
+    "add": "Add",
+    "search": "Search",
+    "settings": "Settings",
+    "close": "Close",
+    "view": "View",
+    "loading": "Loading..."
+  },
+  "tree": {
+    "title": "Tree",
+    "addPerson": "Add a person",
+    "addPersonHere": "Add a person here",
+    "addParent": "Add parent",
+    "addChild": "Add child",
+    "personDetails": "Person details"
+  },
+  "person": {
+    "firstName": "First name",
+    "lastName": "Last name",
+    "birthYear": "Birth year",
+    "deathYear": "Death year",
+    "relation": "Relation"
+  },
+  "settings": {
+    "title": "Settings",
+    "language": "Language",
+    "theme": "Theme",
+    "reduceAnimations": "Reduce animations",
+    "languageDescription": "Choose your preferred language",
+    "themeDescription": "Choose the app theme"
+  }
+}
+

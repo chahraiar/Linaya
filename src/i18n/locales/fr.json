@@ -1,0 +1,38 @@
+{
+  "common": {
+    "save": "Enregistrer",
+    "cancel": "Annuler",
+    "delete": "Supprimer",
+    "edit": "Modifier",
+    "add": "Ajouter",
+    "search": "Rechercher",
+    "settings": "Paramètres",
+    "close": "Fermer",
+    "view": "Voir",
+    "loading": "Chargement..."
+  },
+  "tree": {
+    "title": "Arbre",
+    "addPerson": "Ajouter une personne",
+    "addPersonHere": "Ajouter une personne ici",
+    "addParent": "Ajouter parent",
+    "addChild": "Ajouter enfant",
+    "personDetails": "Détails de la personne"
+  },
+  "person": {
+    "firstName": "Prénom",
+    "lastName": "Nom",
+    "birthYear": "Année de naissance",
+    "deathYear": "Année de décès",
+    "relation": "Relation"
+  },
+  "settings": {
+    "title": "Paramètres",
+    "language": "Langue",
+    "theme": "Thème",
+    "reduceAnimations": "Réduire les animations",
+    "languageDescription": "Choisissez votre langue préférée",
+    "themeDescription": "Choisissez le thème de l'application"
+  }
+}
+
