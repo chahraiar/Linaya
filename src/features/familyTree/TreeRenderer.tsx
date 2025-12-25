@@ -1,5 +1,5 @@
 import React from 'react';
-import { View, StyleSheet, Dimensions, Text } from 'react-native';
+import { View, StyleSheet, Dimensions, Text, TouchableOpacity } from 'react-native';
 import Svg, { Line } from 'react-native-svg';
 import { useTheme } from '../../design-system/ThemeProvider';
 import { Cluster } from './types';
@@ -14,6 +14,8 @@ interface TreeRendererProps {
   translateX: number;
   translateY: number;
   onNodePress: (personId: string) => void;
+  renderLinksOnly?: boolean;
+  renderCardsOnly?: boolean;
 }
 
 const LINK_STROKE_WIDTH = 2;
@@ -25,19 +27,29 @@ export const TreeRenderer: React.FC<TreeRendererProps> = ({
   translateX,
   translateY,
   onNodePress,
+  renderLinksOnly = false,
+  renderCardsOnly = false,
 }) => {
   const { theme } = useTheme();
   const { selectedPersonId } = useFamilyTreeStore();
 
-  // Calculate SVG viewBox dimensions
-  const svgWidth = SCREEN_WIDTH * 3;
-  const svgHeight = SCREEN_HEIGHT * 3;
-  const centerX = svgWidth / 2;
-  const centerY = svgHeight / 2;
+  // Use a large coordinate space for both SVG and cards
+  // The parent Animated.View will apply zoom/pan transformations
+  // So we work in a virtual coordinate space where (0,0) is the center
+  const VIRTUAL_WIDTH = 2000;
+  const VIRTUAL_HEIGHT = 2000;
+  const centerX = VIRTUAL_WIDTH / 2;
+  const centerY = VIRTUAL_HEIGHT / 2;
 
-  // Transform coordinates - center the tree (scale/translate handled by parent Animated.View)
-  const transformX = (x: number) => centerX + x;
-  const transformY = (y: number) => centerY + y;
+  // Transform layout coordinates (centered at 0,0) to virtual space (centered at centerX, centerY)
+  const transformX = (x: number) => {
+    if (isNaN(x) || !isFinite(x)) return centerX;
+    return centerX + x;
+  };
+  const transformY = (y: number) => {
+    if (isNaN(y) || !isFinite(y)) return centerY;
+    return centerY + y;
+  };
 
   // Render links between nodes
   const renderLinks = () => {
@@ -67,6 +79,7 @@ export const TreeRenderer: React.FC<TreeRendererProps> = ({
               // Vertical line from child top to parent level
               const midY = (childTopY + parentBottomY) / 2;
 
+              // Vertical line from child top upward
               links.push(
                 <Line
                   key={`link-parent-v-${linkKey}`}
@@ -76,13 +89,13 @@ export const TreeRenderer: React.FC<TreeRendererProps> = ({
                   y2={midY}
                   stroke={LINK_COLOR}
                   strokeWidth={LINK_STROKE_WIDTH}
-                  strokeOpacity={0.5}
+                  strokeOpacity={0.7}
                   strokeLinecap="round"
                 />
               );
 
-              // Horizontal line connecting to parent
-              if (Math.abs(nodeX - parentX) > 10) {
+              // Horizontal line connecting to parent (if not aligned)
+              if (Math.abs(nodeX - parentX) > 15) {
                 links.push(
                   <Line
                     key={`link-parent-h-${linkKey}`}
@@ -92,12 +105,12 @@ export const TreeRenderer: React.FC<TreeRendererProps> = ({
                     y2={midY}
                     stroke={LINK_COLOR}
                     strokeWidth={LINK_STROKE_WIDTH}
-                    strokeOpacity={0.5}
+                    strokeOpacity={0.7}
                     strokeLinecap="round"
                   />
                 );
                 
-                // Vertical line from horizontal to parent
+                // Vertical line from horizontal to parent bottom
                 links.push(
                   <Line
                     key={`link-parent-v2-${linkKey}`}
@@ -107,12 +120,12 @@ export const TreeRenderer: React.FC<TreeRendererProps> = ({
                     y2={parentBottomY}
                     stroke={LINK_COLOR}
                     strokeWidth={LINK_STROKE_WIDTH}
-                    strokeOpacity={0.5}
+                    strokeOpacity={0.7}
                     strokeLinecap="round"
                   />
                 );
               } else {
-                // Direct vertical line if aligned
+                // Direct vertical line if aligned (within 15px)
                 links.push(
                   <Line
                     key={`link-parent-direct-${linkKey}`}
@@ -122,7 +135,7 @@ export const TreeRenderer: React.FC<TreeRendererProps> = ({
                     y2={parentBottomY}
                     stroke={LINK_COLOR}
                     strokeWidth={LINK_STROKE_WIDTH}
-                    strokeOpacity={0.5}
+                    strokeOpacity={0.7}
                     strokeLinecap="round"
                   />
                 );
@@ -143,17 +156,18 @@ export const TreeRenderer: React.FC<TreeRendererProps> = ({
 
               // Only draw if partners are on the same level (within 10px)
               if (Math.abs(nodeY - partnerY) < 10) {
-                // Connect at the middle of the cards
+                // Connect at the middle height of the cards for better visual connection
+                const cardCenterY = nodeY;
                 links.push(
                   <Line
                     key={`link-partner-${partnerLinkKey}`}
                     x1={nodeX}
-                    y1={nodeY}
+                    y1={cardCenterY}
                     x2={partnerX}
-                    y2={partnerY}
+                    y2={cardCenterY}
                     stroke={LINK_COLOR}
                     strokeWidth={LINK_STROKE_WIDTH}
-                    strokeOpacity={0.6}
+                    strokeOpacity={0.7}
                     strokeLinecap="round"
                   />
                 );
@@ -175,44 +189,124 @@ export const TreeRenderer: React.FC<TreeRendererProps> = ({
     );
   }
 
+  // Render only links
+  if (renderLinksOnly) {
+    return (
+      <View style={styles.container} pointerEvents="none">
+        <Svg
+          width={VIRTUAL_WIDTH}
+          height={VIRTUAL_HEIGHT}
+          viewBox={`0 0 ${VIRTUAL_WIDTH} ${VIRTUAL_HEIGHT}`}
+          style={[
+            {
+              position: 'absolute',
+              left: -VIRTUAL_WIDTH / 2,
+              top: -VIRTUAL_HEIGHT / 2,
+            },
+          ]}
+          pointerEvents="none"
+        >
+          {renderLinks()}
+        </Svg>
+      </View>
+    );
+  }
+
+  // Render only cards
+  if (renderCardsOnly) {
+    return (
+      <View style={styles.container} pointerEvents="box-none">
+        {clusters.map((cluster, clusterIndex) =>
+          cluster.nodes.map((node) => {
+            const x = transformX(node.position.x);
+            const y = transformY(node.position.y);
+            const isSelected = selectedPersonId === node.person.id;
+
+            if (isNaN(x) || isNaN(y) || !isFinite(x) || !isFinite(y)) {
+              console.warn(`Invalid coordinates for node ${node.person.id}: x=${x}, y=${y}`);
+              return null;
+            }
+
+            return (
+              <View
+                key={`card-${clusterIndex}-${node.person.id}`}
+                style={[
+                  styles.cardContainer,
+                  {
+                    left: x - CARD_WIDTH / 2 - VIRTUAL_WIDTH / 2,
+                    top: y - CARD_HEIGHT / 2 - VIRTUAL_HEIGHT / 2,
+                  },
+                ]}
+              >
+                <PersonCard
+                  person={node.person}
+                  onPress={onNodePress}
+                  isSelected={isSelected}
+                />
+              </View>
+            );
+          })
+        )}
+      </View>
+    );
+  }
+
+  // Default: render both
   return (
-    <View style={styles.container}>
-      {/* SVG for links - rendered behind cards */}
+    <View style={styles.container} pointerEvents="box-none">
+      {/* SVG for links */}
       <Svg
-        width="100%"
-        height="100%"
-        viewBox={`0 0 ${svgWidth} ${svgHeight}`}
-        style={[StyleSheet.absoluteFill, { zIndex: 0 }]}
-        preserveAspectRatio="xMidYMid meet"
+        width={VIRTUAL_WIDTH}
+        height={VIRTUAL_HEIGHT}
+        viewBox={`0 0 ${VIRTUAL_WIDTH} ${VIRTUAL_HEIGHT}`}
+        style={[
+          {
+            position: 'absolute',
+            left: -VIRTUAL_WIDTH / 2,
+            top: -VIRTUAL_HEIGHT / 2,
+            zIndex: 0,
+          },
+        ]}
+        pointerEvents="none"
       >
         {renderLinks()}
       </Svg>
 
-      {/* Person cards - rendered on top */}
+      {/* Person cards */}
       {clusters.map((cluster, clusterIndex) =>
         cluster.nodes.map((node) => {
           const x = transformX(node.position.x);
           const y = transformY(node.position.y);
           const isSelected = selectedPersonId === node.person.id;
 
+          if (isNaN(x) || isNaN(y) || !isFinite(x) || !isFinite(y)) {
+            console.warn(`Invalid coordinates for node ${node.person.id}: x=${x}, y=${y}`);
+            return null;
+          }
+
           return (
-            <View
+            <TouchableOpacity
               key={`card-${clusterIndex}-${node.person.id}`}
               style={[
                 styles.cardContainer,
                 {
-                  left: x - CARD_WIDTH / 2,
-                  top: y - CARD_HEIGHT / 2,
-                  zIndex: 1,
+                  left: x - CARD_WIDTH / 2 - VIRTUAL_WIDTH / 2,
+                  top: y - CARD_HEIGHT / 2 - VIRTUAL_HEIGHT / 2,
+                  zIndex: 100,
                 },
               ]}
+              activeOpacity={0.9}
+              onPress={(e) => {
+                console.log('🎯 Card TouchableOpacity pressed:', node.person.id);
+                onNodePress(node.person.id);
+              }}
             >
               <PersonCard
                 person={node.person}
-                onPress={() => onNodePress(node.person.id)}
+                onPress={() => {}}
                 isSelected={isSelected}
               />
-            </View>
+            </TouchableOpacity>
           );
         })
       )}

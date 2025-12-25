@@ -15,7 +15,7 @@ import { RootStackParamList } from '../navigation/navigation';
 const { width: SCREEN_WIDTH, height: SCREEN_HEIGHT } = Dimensions.get('window');
 const MIN_SCALE = 0.3;
 const MAX_SCALE = 3.0;
-const DEFAULT_SCALE = 1.5; // Augmenté pour que l'arbre soit plus visible au démarrage
+const DEFAULT_SCALE = 0.6; // Zoom initial à 0.6
 
 type NavigationProp = NativeStackNavigationProp<RootStackParamList>;
 
@@ -23,10 +23,9 @@ export const FamilyTreeScreen: React.FC = () => {
   const { t } = useTranslation();
   const { theme } = useTheme();
   const navigation = useNavigation<NavigationProp>();
-  const { persons, setPersons, selectedPersonId, setSelectedPerson, getPerson } = useFamilyTreeStore();
+  const { persons, setPersons, getPerson, selectedPersonId } = useFamilyTreeStore();
   const [clusters, setClusters] = useState<Cluster[]>([]);
   const [searchQuery, setSearchQuery] = useState('');
-  const [showPersonModal, setShowPersonModal] = useState(false);
   const [showAddMenu, setShowAddMenu] = useState(false);
   
   // Animation values for zoom and pan
@@ -87,19 +86,21 @@ export const FamilyTreeScreen: React.FC = () => {
     };
   }, []);
 
-  // Track touches for pinch gesture
-  const touches = useRef<{ [key: string]: { x: number; y: number } }>({});
+  // Track pinch and pan gestures
   const lastPinchDistance = useRef<number | null>(null);
   const isPinching = useRef(false);
+  const isPanning = useRef(false);
   const hasMoved = useRef(false);
-
+  
   // Pan responder for drag and pinch
   const panResponder = useRef(
     PanResponder.create({
       onStartShouldSetPanResponder: (evt) => {
+        const touchCount = evt.nativeEvent.touches?.length || 0;
         hasMoved.current = false;
-        // Check if we have 2 touches (pinch gesture)
-        if (evt.nativeEvent.touches && evt.nativeEvent.touches.length === 2) {
+        // Always capture pinch (2 touches)
+        if (touchCount === 2) {
+          console.log('📌 Pinch detected in onStartShouldSetPanResponder');
           isPinching.current = true;
           const touch1 = evt.nativeEvent.touches[0];
           const touch2 = evt.nativeEvent.touches[1];
@@ -107,27 +108,40 @@ export const FamilyTreeScreen: React.FC = () => {
             Math.pow(touch2.pageX - touch1.pageX, 2) + Math.pow(touch2.pageY - touch1.pageY, 2)
           );
           lastPinchDistance.current = distance;
-          return true; // Always capture pinch gestures
+          return true;
         }
-        // For single touch, don't capture immediately - wait for movement
+        // Don't capture single touch on start - let cards handle taps
+        return false;
+      },
+      onStartShouldSetPanResponderCapture: (evt) => {
+        // Don't capture in capture phase - let onStartShouldSetPanResponder handle it
+        // This allows the PanResponder to be properly granted
         return false;
       },
       onMoveShouldSetPanResponder: (_, gestureState) => {
-        // Only respond if there's significant movement (not just a tap)
-        const moved = Math.abs(gestureState.dx) > 10 || Math.abs(gestureState.dy) > 10;
-        hasMoved.current = moved;
+        const moved = Math.abs(gestureState.dx) > 5 || Math.abs(gestureState.dy) > 5;
+        if (moved && !isPinching.current) {
+          isPanning.current = true;
+          hasMoved.current = true;
+        }
+        return moved || isPinching.current;
+      },
+      onMoveShouldSetPanResponderCapture: (_, gestureState) => {
+        const moved = Math.abs(gestureState.dx) > 5 || Math.abs(gestureState.dy) > 5;
         return moved || isPinching.current;
       },
       onPanResponderGrant: () => {
+        console.log('✅ PanResponder GRANTED - isPinching:', isPinching.current, 'isPanning:', isPanning.current);
         translateXAnim.setOffset(lastPanX.current);
         translateYAnim.setOffset(lastPanY.current);
         translateXAnim.setValue(0);
         translateYAnim.setValue(0);
+        scaleAnim.setOffset(lastScale.current);
+        scaleAnim.setValue(1);
       },
       onPanResponderMove: (evt, gestureState) => {
-        // Check if we have 2 touches (pinch gesture)
-        if (evt.nativeEvent.touches && evt.nativeEvent.touches.length === 2) {
-          isPinching.current = true;
+        // Handle pinch zoom
+        if (evt.nativeEvent.touches?.length === 2 && isPinching.current) {
           const touch1 = evt.nativeEvent.touches[0];
           const touch2 = evt.nativeEvent.touches[1];
           const distance = Math.sqrt(
@@ -136,35 +150,51 @@ export const FamilyTreeScreen: React.FC = () => {
           
           if (lastPinchDistance.current !== null && lastPinchDistance.current > 0) {
             const scaleChange = distance / lastPinchDistance.current;
-            const newScale = Math.max(MIN_SCALE, Math.min(MAX_SCALE, lastScale.current * scaleChange));
-            scaleAnim.setValue(newScale);
-            lastScale.current = newScale;
-            console.log('📌 Pinch zoom:', newScale.toFixed(2));
+            const newScale = lastScale.current * scaleChange;
+            const clampedScale = Math.max(MIN_SCALE, Math.min(MAX_SCALE, newScale));
+            scaleAnim.setValue(clampedScale / lastScale.current);
+            console.log('📌 Pinch zoom - distance:', distance.toFixed(1), 'scaleChange:', scaleChange.toFixed(2), 'newScale:', clampedScale.toFixed(2));
           }
           lastPinchDistance.current = distance;
-        } else if (!isPinching.current && hasMoved.current) {
-          // Single touch with movement - pan gesture
+        } 
+        // Handle pan (drag)
+        else if (isPanning.current && !isPinching.current) {
           translateXAnim.setValue(gestureState.dx);
           translateYAnim.setValue(gestureState.dy);
+          console.log('➡️ Pan - dx:', gestureState.dx.toFixed(1), 'dy:', gestureState.dy.toFixed(1));
         }
       },
       onPanResponderRelease: (_, gestureState) => {
+        console.log('🔴 PanResponder RELEASED - isPinching:', isPinching.current, 'isPanning:', isPanning.current);
+        
         translateXAnim.flattenOffset();
         translateYAnim.flattenOffset();
-        // Update last position only if we actually moved (not just a tap)
-        if (hasMoved.current && !isPinching.current) {
+        scaleAnim.flattenOffset();
+
+        // Update last position if we panned
+        if (isPanning.current) {
           lastPanX.current = lastPanX.current + gestureState.dx;
           lastPanY.current = lastPanY.current + gestureState.dy;
+          console.log('📍 Updated pan position - x:', lastPanX.current.toFixed(1), 'y:', lastPanY.current.toFixed(1));
         }
-        // Reset pinch state
+        
+        // Update last scale if we pinched
+        if (isPinching.current) {
+          const currentScale = lastScale.current * scaleAnim._value;
+          lastScale.current = Math.max(MIN_SCALE, Math.min(MAX_SCALE, currentScale));
+          console.log('🔍 Updated scale:', lastScale.current.toFixed(2));
+        }
+        
+        // Reset state
         isPinching.current = false;
+        isPanning.current = false;
         lastPinchDistance.current = null;
-        touches.current = {};
         hasMoved.current = false;
       },
       onPanResponderTerminationRequest: () => {
-        // Allow other responders to take over if needed
-        return false;
+        console.log('🛑 PanResponderTerminationRequest - ALLOWING termination');
+        // Allow children (cards) to take over if they request it
+        return true;
       },
     })
   ).current;
@@ -250,11 +280,14 @@ export const FamilyTreeScreen: React.FC = () => {
   };
 
   const handleNodePress = (personId: string) => {
-    setSelectedPerson(personId);
-    setShowPersonModal(true);
+    console.log('🚀 Navigating to PersonDetail for:', personId);
+    try {
+      navigation.navigate('PersonDetail', { personId });
+      console.log('✅ Navigation called successfully');
+    } catch (error) {
+      console.error('❌ Navigation error:', error);
+    }
   };
-
-  const selectedPerson = selectedPersonId ? getPerson(selectedPersonId) : null;
 
   return (
     <Screen gradient={false} style={{ backgroundColor: '#FAF9F6' }}>
@@ -272,10 +305,15 @@ export const FamilyTreeScreen: React.FC = () => {
       </View>
 
       {/* Tree Canvas with zoom and pan */}
-      <View 
-        style={styles.canvasContainer}
-        {...panResponder.panHandlers}
-      >
+      <View style={styles.canvasContainer}>
+        {/* Layer 1: Background PanResponder - ONLY for gestures, invisible */}
+        <View
+          style={StyleSheet.absoluteFill}
+          {...panResponder.panHandlers}
+          collapsable={false}
+        />
+        
+        {/* Layer 2: Animated SVG layer (links) - no touch events */}
         <Animated.View
           style={[
             StyleSheet.absoluteFill,
@@ -287,30 +325,50 @@ export const FamilyTreeScreen: React.FC = () => {
               ],
             },
           ]}
+          pointerEvents="none"
         >
           {clusters.length > 0 ? (
             <TreeRenderer
               clusters={clusters}
-              scale={1} // Don't apply scale twice - it's already in the Animated.View
-              translateX={0} // Don't apply translate twice - it's already in the Animated.View
-              translateY={0} // Don't apply translate twice - it's already in the Animated.View
+              scale={1}
+              translateX={0}
+              translateY={0}
               onNodePress={handleNodePress}
+              renderLinksOnly={true}
             />
           ) : (
-            <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center' }}>
+            <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center' }} pointerEvents="none">
               <Text style={{ color: theme.colors.text }}>Chargement de l'arbre...</Text>
             </View>
           )}
         </Animated.View>
         
-        {/* Double tap handler - captures taps on empty space */}
-        <TouchableOpacity
-          style={StyleSheet.absoluteFill}
-          activeOpacity={1}
-          onPress={handleDoubleTap}
-          delayPressIn={0}
+        {/* Layer 3: Animated Cards layer - interactive, ABOVE PanResponder */}
+        <Animated.View
+          style={[
+            StyleSheet.absoluteFill,
+            {
+              transform: [
+                { translateX: translateXAnim },
+                { translateY: translateYAnim },
+                { scale: scaleAnim },
+              ],
+            },
+          ]}
           pointerEvents="box-none"
-        />
+        >
+          {clusters.length > 0 && (
+            <TreeRenderer
+              clusters={clusters}
+              scale={1}
+              translateX={0}
+              translateY={0}
+              onNodePress={handleNodePress}
+              renderCardsOnly={true}
+            />
+          )}
+        </Animated.View>
+        
       </View>
 
       {/* Bottom UI */}
@@ -337,56 +395,6 @@ export const FamilyTreeScreen: React.FC = () => {
         </TouchableOpacity>
       </View>
 
-      {/* Person Details Modal */}
-      <Modal
-        visible={showPersonModal}
-        transparent
-        animationType="slide"
-        onRequestClose={() => setShowPersonModal(false)}
-      >
-        <Pressable
-          style={styles.modalOverlay}
-          onPress={() => setShowPersonModal(false)}
-        >
-          <Card variant="elevated" style={styles.modalContent} padding="lg">
-            {selectedPerson && (
-              <>
-                <Text variant="heading">{t('tree.personDetails')}</Text>
-                <Spacer size="md" />
-                <Text variant="subheading">
-                  {selectedPerson.firstName} {selectedPerson.lastName}
-                </Text>
-                {selectedPerson.birthYear && (
-                  <Text color="textSecondary">
-                    {t('person.birthYear')}: {selectedPerson.birthYear}
-                  </Text>
-                )}
-                {selectedPerson.deathYear && (
-                  <Text color="textSecondary">
-                    {t('person.deathYear')}: {selectedPerson.deathYear}
-                  </Text>
-                )}
-                <Spacer size="lg" />
-                <Button variant="primary" onPress={() => {}}>
-                  {t('common.view')}
-                </Button>
-                <Spacer size="sm" />
-                <Button variant="secondary" onPress={() => {}}>
-                  {t('tree.addParent')}
-                </Button>
-                <Spacer size="sm" />
-                <Button variant="secondary" onPress={() => {}}>
-                  {t('tree.addChild')}
-                </Button>
-                <Spacer size="sm" />
-                <Button variant="ghost" onPress={() => setShowPersonModal(false)}>
-                  {t('common.close')}
-                </Button>
-              </>
-            )}
-          </Card>
-        </Pressable>
-      </Modal>
 
       {/* Add Menu Modal */}
       <Modal

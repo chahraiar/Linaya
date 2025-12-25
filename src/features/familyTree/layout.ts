@@ -7,13 +7,13 @@ import { TreeNode, Cluster, Position } from './types';
  */
 
 // Card dimensions (must match PersonCard.tsx)
-const CARD_WIDTH = 140;
-const CARD_HEIGHT = 120;
+const CARD_WIDTH = 150;
+const CARD_HEIGHT = 130;
 
-const NODE_SPACING_X = CARD_WIDTH + 40; // Espacement horizontal entre nœuds (carte + marge)
-const NODE_SPACING_Y = CARD_HEIGHT + 60; // Espacement vertical entre générations (carte + marge)
-const PARTNER_SPACING = 20; // Espacement entre partenaires (couple) - plus serré pour les cartes
-const CLUSTER_SPACING = 400;
+const NODE_SPACING_X = CARD_WIDTH + 50; // Espacement horizontal entre nœuds (carte + marge généreuse)
+const NODE_SPACING_Y = CARD_HEIGHT + 80; // Espacement vertical entre générations (carte + marge pour liens)
+const PARTNER_SPACING = CARD_WIDTH + 20; // Espacement entre partenaires = largeur carte + petite marge
+const CLUSTER_SPACING = 500;
 
 /**
  * Find root nodes (persons without parents)
@@ -59,12 +59,27 @@ export function createClusters(persons: Person[]): Cluster[] {
     const clusterId = `cluster-${clusters.length}`;
     const descendants = findDescendants(root.id, persons);
     
-    // Inclure le partenaire du root s'il existe
+    // Inclure les partenaires et leurs descendants pour garder les liens complets
     const clusterPersonsSet = new Set([root.id, ...descendants]);
-    if (root.partnerId) {
-      clusterPersonsSet.add(root.partnerId);
-      const partnerDescendants = findDescendants(root.partnerId, persons);
-      partnerDescendants.forEach(id => clusterPersonsSet.add(id));
+    const queue = Array.from(clusterPersonsSet);
+
+    while (queue.length > 0) {
+      const currentId = queue.shift()!;
+      const currentPerson = persons.find((p) => p.id === currentId);
+      if (!currentPerson?.partnerId) continue;
+
+      if (!clusterPersonsSet.has(currentPerson.partnerId)) {
+        clusterPersonsSet.add(currentPerson.partnerId);
+        queue.push(currentPerson.partnerId);
+      }
+
+      const partnerDescendants = findDescendants(currentPerson.partnerId, persons);
+      partnerDescendants.forEach((id) => {
+        if (!clusterPersonsSet.has(id)) {
+          clusterPersonsSet.add(id);
+          queue.push(id);
+        }
+      });
     }
     
     const clusterPersons = Array.from(clusterPersonsSet)

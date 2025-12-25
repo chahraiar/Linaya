@@ -1,18 +1,18 @@
 import React from 'react';
-import { View, StyleSheet, Pressable } from 'react-native';
+import { View, StyleSheet, TouchableOpacity } from 'react-native';
 import { Text } from '../../components/ui/Text';
 import { useTheme } from '../../design-system/ThemeProvider';
 import { Person } from '../../store/familyTreeStore';
 
 interface PersonCardProps {
   person: Person;
-  onPress: () => void;
+  onPress: (personId: string) => void;
   isSelected?: boolean;
 }
 
-const AVATAR_SIZE = 56;
-const CARD_WIDTH = 140;
-const CARD_HEIGHT = 120;
+const AVATAR_SIZE = 60;
+const CARD_WIDTH = 150;
+const CARD_HEIGHT = 130;
 
 /**
  * Generate a simple avatar placeholder based on person's name
@@ -34,21 +34,31 @@ export const PersonCard: React.FC<PersonCardProps> = ({
     : '';
 
   return (
-    <Pressable
-      onPress={onPress}
-      style={({ pressed }) => [
+    <TouchableOpacity
+      onPress={() => {
+        console.log('🎯 PersonCard pressed:', person.id, person.firstName, person.lastName);
+        onPress(person.id);
+      }}
+      onPressIn={() => {
+        console.log('👆 Card TouchableOpacity press IN:', person.firstName, person.lastName);
+      }}
+      onPressOut={() => {
+        console.log('👋 Card TouchableOpacity press OUT:', person.firstName, person.lastName);
+      }}
+      activeOpacity={0.7}
+      style={[
         styles.card,
         {
           backgroundColor: '#FFFFFF',
-          borderRadius: 14,
+          borderRadius: 16,
           shadowColor: '#000',
-          shadowOffset: { width: 0, height: 2 },
-          shadowOpacity: isSelected ? 0.15 : pressed ? 0.12 : 0.08,
-          shadowRadius: isSelected ? 8 : 6,
-          elevation: isSelected ? 4 : 2,
-          borderWidth: isSelected ? 2 : 0,
+          shadowOffset: { width: 0, height: 3 },
+          shadowOpacity: isSelected ? 0.2 : 0.1,
+          shadowRadius: isSelected ? 10 : 8,
+          elevation: isSelected ? 6 : 3,
+          borderWidth: isSelected ? 2.5 : 0,
           borderColor: isSelected ? theme.colors.primary : 'transparent',
-          transform: [{ scale: isSelected ? 1.02 : pressed ? 0.98 : 1 }],
+          transform: [{ scale: isSelected ? 1.03 : 1 }],
         },
       ]}
     >
@@ -87,7 +97,7 @@ export const PersonCard: React.FC<PersonCardProps> = ({
           {dates}
         </Text>
       )}
-    </Pressable>
+    </TouchableOpacity>
   );
 };
 
@@ -116,16 +126,16 @@ const styles = StyleSheet.create({
     fontSize: 24,
   },
   name: {
-    fontSize: 13,
+    fontSize: 14,
     fontWeight: '600',
     textAlign: 'center',
-    marginBottom: 4,
-    lineHeight: 16,
+    marginBottom: 5,
+    lineHeight: 18,
   },
   dates: {
-    fontSize: 11,
+    fontSize: 12,
     textAlign: 'center',
-    lineHeight: 14,
+    lineHeight: 15,
   },
 });
 
