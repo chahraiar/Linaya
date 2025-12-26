@@ -280,11 +280,12 @@ const styles = StyleSheet.create({
     flex: 1,
     justifyContent: 'space-between',
     paddingHorizontal: 24,
-    paddingTop: 80, // Top padding for header - push text higher
+    paddingTop: 20, // Minimal top padding - text very high
     paddingBottom: 60, // Bottom padding for buttons - push buttons lower
   },
   header: {
     alignItems: 'center',
+    marginTop: 0, // No extra margin, already at top
   },
   title: {
     textAlign: 'center',
