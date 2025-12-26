@@ -15,7 +15,7 @@ import { useTranslation } from 'react-i18next';
 import { useTheme } from '../design-system/ThemeProvider';
 import { Button, Text, Screen } from '../components/ui';
 import { Spacer } from '../components/ui/Spacer';
-import { supabase } from '../lib/supabase';
+import { supabase, isSupabaseReady } from '../lib/supabase';
 import { RootStackParamList } from '../navigation/navigation';
 import * as WebBrowser from 'expo-web-browser';
 
@@ -41,6 +41,14 @@ export const LoginScreen: React.FC = () => {
   }, []);
 
   const handleGoogleSignIn = async () => {
+    if (!isSupabaseReady) {
+      Alert.alert(
+        t('auth.error'),
+        'Supabase n\'est pas configuré. Veuillez créer un fichier .env avec vos identifiants Supabase.'
+      );
+      return;
+    }
+
     try {
       setLoading('google');
       const redirectUrl = Platform.OS === 'web' 
@@ -82,6 +90,14 @@ export const LoginScreen: React.FC = () => {
   };
 
   const handleFacebookSignIn = async () => {
+    if (!isSupabaseReady) {
+      Alert.alert(
+        t('auth.error'),
+        'Supabase n\'est pas configuré. Veuillez créer un fichier .env avec vos identifiants Supabase.'
+      );
+      return;
+    }
+
     try {
       setLoading('facebook');
       const redirectUrl = Platform.OS === 'web' 
