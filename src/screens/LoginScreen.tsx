@@ -7,6 +7,7 @@ import {
   KeyboardAvoidingView,
   ScrollView,
   Alert,
+  Image,
 } from 'react-native';
 import { Video, ResizeMode, AVPlaybackStatus } from 'expo-av';
 import { useNavigation } from '@react-navigation/native';
@@ -167,32 +168,27 @@ export const LoginScreen: React.FC = () => {
       <View style={styles.overlay} />
 
       {/* Content */}
-      <KeyboardAvoidingView
-        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
-        style={styles.content}
-      >
-        <ScrollView
-          contentContainerStyle={styles.scrollContent}
-          showsVerticalScrollIndicator={false}
-        >
-          <View style={styles.header}>
-            <Text
-              size="xxl"
-              weight="bold"
-              color="textInverse"
-              style={styles.title}
-            >
-              {t('auth.welcome')}
-            </Text>
-            <Spacer size="sm" />
-            <Text size="lg" color="textInverse" style={styles.subtitle}>
-              {t('auth.subtitle')}
-            </Text>
-          </View>
+      <View style={styles.content}>
+        {/* Header - Top of screen */}
+        <View style={styles.header}>
+          <Text
+            size="xxl"
+            weight="bold"
+            color="textInverse"
+            style={styles.title}
+          >
+            {t('auth.welcome')}
+          </Text>
+          <Spacer size="sm" />
+          <Text size="lg" color="textInverse" style={styles.subtitle}>
+            {t('auth.subtitle')}
+          </Text>
+        </View>
 
-          <Spacer size="xl" />
-
-          <View style={styles.buttonsContainer}>
+        {/* Buttons - Bottom of screen */}
+        <View style={styles.buttonsContainer}>
+          {/* Google and Facebook on same row */}
+          <View style={styles.socialButtonsRow}>
             {/* Google Sign In */}
             <Button
               variant="glass"
@@ -200,16 +196,16 @@ export const LoginScreen: React.FC = () => {
               onPress={handleGoogleSignIn}
               loading={loading === 'google'}
               disabled={loading !== null}
-              style={styles.button}
+              style={[styles.socialButton, styles.googleButton]}
             >
-              <View style={styles.buttonContent}>
-                <Text size="lg" weight="medium" color="textInverse">
-                  🔵 {t('auth.signInWithGoogle')}
-                </Text>
-              </View>
+              <Image
+                source={require('../../assets/logo-google-48.png')}
+                style={styles.socialLogo}
+                resizeMode="contain"
+              />
             </Button>
 
-            <Spacer size="md" />
+            <Spacer size="md" horizontal />
 
             {/* Facebook Sign In */}
             <Button
@@ -218,49 +214,49 @@ export const LoginScreen: React.FC = () => {
               onPress={handleFacebookSignIn}
               loading={loading === 'facebook'}
               disabled={loading !== null}
-              style={styles.button}
+              style={[styles.socialButton, styles.facebookButton]}
             >
-              <View style={styles.buttonContent}>
-                <Text size="lg" weight="medium" color="textInverse">
-                  📘 {t('auth.signInWithFacebook')}
-                </Text>
-              </View>
-            </Button>
-
-            <Spacer size="md" />
-
-            {/* Email Sign In */}
-            <Button
-              variant="glass"
-              size="lg"
-              onPress={handleEmailSignIn}
-              disabled={loading !== null}
-              style={styles.button}
-            >
-              <View style={styles.buttonContent}>
-                <Text size="lg" weight="medium" color="textInverse">
-                  ✉️ {t('auth.signInWithEmail')}
-                </Text>
-              </View>
-            </Button>
-
-            <Spacer size="lg" />
-
-            {/* Sign Up */}
-            <Button
-              variant="ghost"
-              size="lg"
-              onPress={handleSignUp}
-              disabled={loading !== null}
-              style={[styles.button, styles.signUpButton]}
-            >
-              <Text size="md" weight="medium" color="textInverse">
-                {t('auth.signUp')}
-              </Text>
+              <Image
+                source={require('../../assets/logo-facebook-48.png')}
+                style={styles.socialLogo}
+                resizeMode="contain"
+              />
             </Button>
           </View>
-        </ScrollView>
-      </KeyboardAvoidingView>
+
+          <Spacer size="md" />
+
+          {/* Email Sign In */}
+          <Button
+            variant="glass"
+            size="lg"
+            onPress={handleEmailSignIn}
+            disabled={loading !== null}
+            style={styles.button}
+          >
+            <View style={styles.buttonContent}>
+              <Text size="lg" weight="medium" color="textInverse">
+                ✉️ {t('auth.signInWithEmail')}
+              </Text>
+            </View>
+          </Button>
+
+          <Spacer size="md" />
+
+          {/* Sign Up */}
+          <Button
+            variant="ghost"
+            size="lg"
+            onPress={handleSignUp}
+            disabled={loading !== null}
+            style={[styles.button, styles.signUpButton]}
+          >
+            <Text size="md" weight="medium" color="textInverse">
+              {t('auth.signUp')}
+            </Text>
+          </Button>
+        </View>
+      </View>
     </Screen>
   );
 };
@@ -282,16 +278,13 @@ const styles = StyleSheet.create({
   },
   content: {
     flex: 1,
-  },
-  scrollContent: {
-    flexGrow: 1,
-    justifyContent: 'center',
+    justifyContent: 'space-between',
     paddingHorizontal: 24,
-    paddingVertical: 48,
+    paddingTop: 80, // Top padding for header - push text higher
+    paddingBottom: 60, // Bottom padding for buttons - push buttons lower
   },
   header: {
     alignItems: 'center',
-    marginBottom: 32,
   },
   title: {
     textAlign: 'center',
@@ -309,6 +302,29 @@ const styles = StyleSheet.create({
     width: '100%',
     maxWidth: 400,
     alignSelf: 'center',
+    marginBottom: 20, // Push buttons to bottom
+  },
+  socialButtonsRow: {
+    flexDirection: 'row',
+    width: '100%',
+    justifyContent: 'space-between',
+  },
+  socialButton: {
+    flex: 1,
+    minHeight: 56,
+    aspectRatio: 1, // Make buttons square
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  googleButton: {
+    marginRight: 8,
+  },
+  facebookButton: {
+    marginLeft: 8,
+  },
+  socialLogo: {
+    width: 48,
+    height: 48,
   },
   button: {
     width: '100%',
