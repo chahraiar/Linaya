@@ -7,7 +7,8 @@ import { useTheme } from '../design-system/ThemeProvider';
 import { Screen, Text, Button, IconButton, Card, Spacer } from '../components/ui';
 import { useFamilyTreeStore } from '../store/familyTreeStore';
 import { useSettingsStore } from '../store/settingsStore';
-import { createClusters, Cluster } from '../features/familyTree/layout';
+import { createClusters } from '../features/familyTree/layout';
+import { Cluster } from '../features/familyTree/types';
 import { TreeRenderer } from '../features/familyTree/TreeRenderer';
 import { mockPersons } from '../features/familyTree/mockData';
 import { RootStackParamList } from '../navigation/navigation';
@@ -28,20 +29,28 @@ export const FamilyTreeScreen: React.FC = () => {
   const [searchQuery, setSearchQuery] = useState('');
   const [showAddMenu, setShowAddMenu] = useState(false);
   
-  // Animation values for zoom and pan
+  // Animation values for zoom and pan - using absolute values (no offsets)
   const scaleAnim = useRef(new Animated.Value(DEFAULT_SCALE)).current;
   const translateXAnim = useRef(new Animated.Value(0)).current;
   const translateYAnim = useRef(new Animated.Value(0)).current;
   
-  // State for current values (for TreeRenderer - not used anymore, transformations are in Animated.View)
+  // Base values at the start of each gesture (simplified approach)
+  const baseScale = useRef(DEFAULT_SCALE);
+  const basePanX = useRef(0);
+  const basePanY = useRef(0);
+  
+  // State for current values
   const [scale, setScale] = useState(DEFAULT_SCALE);
   const [translateX, setTranslateX] = useState(0);
   const [translateY, setTranslateY] = useState(0);
   
-  // Track last pan position
-  const lastPanX = useRef(0);
-  const lastPanY = useRef(0);
-  const lastScale = useRef(DEFAULT_SCALE);
+  // Initialize scale on mount
+  useEffect(() => {
+    scaleAnim.setValue(DEFAULT_SCALE);
+    setScale(DEFAULT_SCALE);
+    baseScale.current = DEFAULT_SCALE;
+    console.log('🎬 Initialized scaleAnim - value:', DEFAULT_SCALE);
+  }, []);
 
   // Initialize with mock data
   useEffect(() => {
@@ -64,19 +73,19 @@ export const FamilyTreeScreen: React.FC = () => {
     }
   }, [persons]);
 
-  // Sync animated values to state
+  // Sync animated values to state (simplified - no complex offset logic)
   useEffect(() => {
     const scaleListener = scaleAnim.addListener(({ value }) => {
-      setScale(value);
-      lastScale.current = value;
+      if (isFinite(value) && value > 0) {
+        setScale(value);
+        console.log('🔍 ZOOM CHANGED - scale:', value.toFixed(2));
+      }
     });
     const xListener = translateXAnim.addListener(({ value }) => {
       setTranslateX(value);
-      lastPanX.current = value;
     });
     const yListener = translateYAnim.addListener(({ value }) => {
       setTranslateY(value);
-      lastPanY.current = value;
     });
 
     return () => {
@@ -130,14 +139,24 @@ export const FamilyTreeScreen: React.FC = () => {
         const moved = Math.abs(gestureState.dx) > 5 || Math.abs(gestureState.dy) > 5;
         return moved || isPinching.current;
       },
-      onPanResponderGrant: () => {
-        console.log('✅ PanResponder GRANTED - isPinching:', isPinching.current, 'isPanning:', isPanning.current);
-        translateXAnim.setOffset(lastPanX.current);
-        translateYAnim.setOffset(lastPanY.current);
-        translateXAnim.setValue(0);
-        translateYAnim.setValue(0);
-        scaleAnim.setOffset(lastScale.current);
-        scaleAnim.setValue(1);
+      onPanResponderGrant: (evt) => {
+        // Stop any ongoing animations first
+        scaleAnim.stopAnimation();
+        translateXAnim.stopAnimation();
+        translateYAnim.stopAnimation();
+        
+        // Save current values as base for this gesture (simplified approach)
+        baseScale.current = scale;
+        basePanX.current = translateX;
+        basePanY.current = translateY;
+        
+        // If not pinching and we have a single touch, it's a pan gesture
+        if (!isPinching.current && evt.nativeEvent.touches?.length === 1) {
+          isPanning.current = true;
+          console.log('✅ Pan gesture started');
+        }
+        
+        console.log('✅ PanResponder GRANTED - isPinching:', isPinching.current, 'isPanning:', isPanning.current, 'baseScale:', baseScale.current.toFixed(2), 'basePanX:', basePanX.current.toFixed(1), 'basePanY:', basePanY.current.toFixed(1));
       },
       onPanResponderMove: (evt, gestureState) => {
         // Handle pinch zoom
@@ -148,41 +167,82 @@ export const FamilyTreeScreen: React.FC = () => {
             Math.pow(touch2.pageX - touch1.pageX, 2) + Math.pow(touch2.pageY - touch1.pageY, 2)
           );
           
-          if (lastPinchDistance.current !== null && lastPinchDistance.current > 0) {
-            const scaleChange = distance / lastPinchDistance.current;
-            const newScale = lastScale.current * scaleChange;
+          if (lastPinchDistance.current !== null && lastPinchDistance.current > 0 && baseScale.current > 0) {
+            // Calculate scale multiplier from distance change
+            const scaleMultiplier = distance / lastPinchDistance.current;
+            // Apply multiplier to base scale (value at start of gesture)
+            const newScale = baseScale.current * scaleMultiplier;
             const clampedScale = Math.max(MIN_SCALE, Math.min(MAX_SCALE, newScale));
-            scaleAnim.setValue(clampedScale / lastScale.current);
-            console.log('📌 Pinch zoom - distance:', distance.toFixed(1), 'scaleChange:', scaleChange.toFixed(2), 'newScale:', clampedScale.toFixed(2));
+            
+            if (isFinite(clampedScale) && clampedScale > 0) {
+              // Set absolute value directly (no offsets)
+              scaleAnim.setValue(clampedScale);
+              console.log('📌 PINCH ZOOM - distance:', distance.toFixed(1), 'prevDistance:', lastPinchDistance.current.toFixed(1), 'multiplier:', scaleMultiplier.toFixed(3), 'newScale:', clampedScale.toFixed(2));
+            }
           }
           lastPinchDistance.current = distance;
         } 
         // Handle pan (drag)
         else if (isPanning.current && !isPinching.current) {
-          translateXAnim.setValue(gestureState.dx);
-          translateYAnim.setValue(gestureState.dy);
-          console.log('➡️ Pan - dx:', gestureState.dx.toFixed(1), 'dy:', gestureState.dy.toFixed(1));
+          // Add gesture displacement to base position
+          translateXAnim.setValue(basePanX.current + gestureState.dx);
+          translateYAnim.setValue(basePanY.current + gestureState.dy);
+          console.log('➡️ Pan - baseX:', basePanX.current.toFixed(1), 'baseY:', basePanY.current.toFixed(1), 'dx:', gestureState.dx.toFixed(1), 'dy:', gestureState.dy.toFixed(1));
+        } else {
+          console.log('⚠️ PanResponderMove but no action - touches:', evt.nativeEvent.touches?.length, 'isPinching:', isPinching.current, 'isPanning:', isPanning.current);
         }
       },
       onPanResponderRelease: (_, gestureState) => {
-        console.log('🔴 PanResponder RELEASED - isPinching:', isPinching.current, 'isPanning:', isPanning.current);
-        
-        translateXAnim.flattenOffset();
-        translateYAnim.flattenOffset();
-        scaleAnim.flattenOffset();
-
-        // Update last position if we panned
-        if (isPanning.current) {
-          lastPanX.current = lastPanX.current + gestureState.dx;
-          lastPanY.current = lastPanY.current + gestureState.dy;
-          console.log('📍 Updated pan position - x:', lastPanX.current.toFixed(1), 'y:', lastPanY.current.toFixed(1));
-        }
+        console.log('🔴 PanResponder RELEASED - isPinching:', isPinching.current, 'isPanning:', isPanning.current, 'hasMoved:', hasMoved.current);
         
         // Update last scale if we pinched
         if (isPinching.current) {
-          const currentScale = lastScale.current * scaleAnim._value;
-          lastScale.current = Math.max(MIN_SCALE, Math.min(MAX_SCALE, currentScale));
-          console.log('🔍 Updated scale:', lastScale.current.toFixed(2));
+          // Stop any ongoing animations first
+          scaleAnim.stopAnimation();
+          
+          // Get current scale from state (simplified approach)
+          const currentScaleBeforeFlatten = scale;
+          const clampedScale = Math.max(MIN_SCALE, Math.min(MAX_SCALE, currentScaleBeforeFlatten));
+          if (isFinite(clampedScale) && clampedScale > 0) {
+            // Don't reset the scale - it's already correct from the pinch gesture
+            // Just save it as base for next gesture
+            baseScale.current = clampedScale;
+          }
+        }
+
+        // Only flatten if we actually did something
+        if (isPanning.current) {
+          // Stop any ongoing animations first
+          translateXAnim.stopAnimation();
+          translateYAnim.stopAnimation();
+          
+          // For pan, flatten offsets to preserve position
+          translateXAnim.flattenOffset();
+          translateYAnim.flattenOffset();
+        } else if (!isPinching.current) {
+          // Just reset offsets without flattening if we didn't do anything
+          translateXAnim.setOffset(0);
+          translateYAnim.setOffset(0);
+          scaleAnim.setValue(baseScale.current);
+          translateXAnim.setValue(0);
+          translateYAnim.setValue(0);
+          scaleAnim.setValue(1);
+          console.log('🔄 Reset offsets without flattening (no action)');
+        }
+
+        // Save current values as new base for next gesture (simplified approach)
+        if (isPinching.current || isPanning.current) {
+          // Get final values from state (they already have the correct absolute values)
+          const finalScale = Math.max(MIN_SCALE, Math.min(MAX_SCALE, scale));
+          const finalPanX = translateX;
+          const finalPanY = translateY;
+          
+          // Update base values for next gesture
+          baseScale.current = finalScale;
+          basePanX.current = finalPanX;
+          basePanY.current = finalPanY;
+          
+          console.log('💾 Saved base values - scale:', baseScale.current.toFixed(2), 'panX:', basePanX.current.toFixed(1), 'panY:', basePanY.current.toFixed(1));
         }
         
         // Reset state
@@ -226,7 +286,7 @@ export const FamilyTreeScreen: React.FC = () => {
       Math.abs(currentY - lastTapPosition.current.y) < DOUBLE_TAP_DISTANCE
     ) {
       // Double tap detected - toggle between DEFAULT_SCALE and 2.5x
-      const currentScale = lastScale.current;
+      const currentScale = baseScale.current;
       const newScale = currentScale < 2.0 ? 2.5 : DEFAULT_SCALE;
       
       console.log('🔍 Double-tap zoom: from', currentScale.toFixed(2), 'to', newScale.toFixed(2));
@@ -237,7 +297,7 @@ export const FamilyTreeScreen: React.FC = () => {
         tension: 50,
         friction: 7,
       }).start(() => {
-        lastScale.current = newScale;
+        baseScale.current = newScale;
       });
       
       if (newScale === DEFAULT_SCALE) {
@@ -256,8 +316,8 @@ export const FamilyTreeScreen: React.FC = () => {
             friction: 7,
           }),
         ]).start();
-        lastPanX.current = 0;
-        lastPanY.current = 0;
+        basePanX.current = 0;
+        basePanY.current = 0;
       }
       lastTap.current = null;
       lastTapPosition.current = null;
@@ -274,9 +334,9 @@ export const FamilyTreeScreen: React.FC = () => {
   
   // Handle pinch gesture for zoom (if available)
   const handlePinch = (scaleValue: number) => {
-    const newScale = Math.max(MIN_SCALE, Math.min(MAX_SCALE, lastScale.current * scaleValue));
+    const newScale = Math.max(MIN_SCALE, Math.min(MAX_SCALE, baseScale.current * scaleValue));
     scaleAnim.setValue(newScale);
-    lastScale.current = newScale;
+    baseScale.current = newScale;
   };
 
   const handleNodePress = (personId: string) => {
