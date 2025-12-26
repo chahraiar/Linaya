@@ -4,7 +4,7 @@ import { useTheme } from '../../design-system/ThemeProvider';
 
 export interface TextProps extends RNTextProps {
   variant?: 'body' | 'caption' | 'heading' | 'subheading' | 'display';
-  color?: 'text' | 'textSecondary' | 'textTertiary' | 'textInverse' | 'primary';
+  color?: 'text' | 'textSecondary' | 'textTertiary' | 'textInverse' | 'primary' | 'error';
   weight?: 'regular' | 'medium' | 'semibold' | 'bold';
 }
 
@@ -63,6 +63,8 @@ export const Text: React.FC<TextProps> = ({
         return theme.colors.textInverse;
       case 'primary':
         return theme.colors.primary;
+      case 'error':
+        return theme.colors.error;
       default:
         return theme.colors.text;
     }

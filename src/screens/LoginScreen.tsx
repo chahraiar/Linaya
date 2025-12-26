@@ -4,8 +4,6 @@ import {
   StyleSheet,
   Dimensions,
   Platform,
-  KeyboardAvoidingView,
-  ScrollView,
   Alert,
   Image,
 } from 'react-native';
@@ -164,97 +162,101 @@ export const LoginScreen: React.FC = () => {
         }}
       />
 
-      {/* Dark overlay for better text readability */}
-      <View style={styles.overlay} />
+      {/* Gradient overlay - darker at top and bottom, lighter in middle */}
+      <View style={styles.gradientOverlay} />
 
       {/* Content */}
       <View style={styles.content}>
-        {/* Header - Top of screen */}
+        {/* Header - Top of screen with semi-transparent background */}
         <View style={styles.header}>
-          <Text
-            size="xxl"
-            weight="bold"
-            color="textInverse"
-            style={styles.title}
-          >
-            {t('auth.welcome')}
-          </Text>
-          <Spacer size="sm" />
-          <Text size="lg" color="textInverse" style={styles.subtitle}>
-            {t('auth.subtitle')}
-          </Text>
+          <View style={styles.headerTextContainer}>
+            <Text
+              variant="display"
+              weight="bold"
+              color="textInverse"
+              style={styles.title}
+            >
+              {t('auth.welcome')}
+            </Text>
+            <Spacer size="xs" />
+            <Text variant="subheading" color="textInverse" style={styles.subtitle}>
+              {t('auth.subtitle')}
+            </Text>
+          </View>
         </View>
 
-        {/* Buttons - Bottom of screen */}
-        <View style={styles.buttonsContainer}>
-          {/* Google and Facebook on same row */}
-          <View style={styles.socialButtonsRow}>
-            {/* Google Sign In */}
+        {/* Buttons - Bottom of screen with elegant card */}
+        <View style={styles.buttonsWrapper}>
+          <View style={styles.buttonsCard}>
+            {/* Social buttons row */}
+            <View style={styles.socialButtonsRow}>
+              {/* Google Sign In */}
+              <Button
+                variant="ghost"
+                size="lg"
+                onPress={handleGoogleSignIn}
+                loading={loading === 'google'}
+                disabled={loading !== null}
+                style={styles.socialButton}
+              >
+                <Image
+                  source={require('../../assets/logo-google-48.png')}
+                  style={styles.socialLogo}
+                  resizeMode="contain"
+                />
+              </Button>
+
+              <Spacer size="md" horizontal />
+
+              {/* Facebook Sign In */}
+              <Button
+                variant="ghost"
+                size="lg"
+                onPress={handleFacebookSignIn}
+                loading={loading === 'facebook'}
+                disabled={loading !== null}
+                style={styles.socialButton}
+              >
+                <Image
+                  source={require('../../assets/logo-facebook-48.png')}
+                  style={styles.socialLogo}
+                  resizeMode="contain"
+                />
+              </Button>
+            </View>
+
+            <Spacer size="md" />
+
+            {/* Email Sign In */}
             <Button
-              variant="glass"
+              variant="ghost"
               size="lg"
-              onPress={handleGoogleSignIn}
-              loading={loading === 'google'}
+              onPress={handleEmailSignIn}
               disabled={loading !== null}
-              style={[styles.socialButton, styles.googleButton]}
+              style={styles.emailButton}
             >
-              <Image
-                source={require('../../assets/logo-google-48.png')}
-                style={styles.socialLogo}
-                resizeMode="contain"
-              />
+              <View style={styles.buttonContent}>
+                <Text variant="body" weight="medium" color="textInverse">
+                  ✉️ {t('auth.signInWithEmail')}
+                </Text>
+              </View>
             </Button>
 
-            <Spacer size="md" horizontal />
+            <Spacer size="md" />
 
-            {/* Facebook Sign In */}
+            {/* Sign Up */}
             <Button
-              variant="glass"
+              variant="ghost"
               size="lg"
-              onPress={handleFacebookSignIn}
-              loading={loading === 'facebook'}
+              onPress={handleSignUp}
               disabled={loading !== null}
-              style={[styles.socialButton, styles.facebookButton]}
+              style={styles.signUpButton}
             >
-              <Image
-                source={require('../../assets/logo-facebook-48.png')}
-                style={styles.socialLogo}
-                resizeMode="contain"
-              />
+              <Text variant="body" weight="medium" color="textInverse">
+                {t('auth.signUp')}
+              </Text>
             </Button>
           </View>
-
-          <Spacer size="md" />
-
-          {/* Email Sign In */}
-          <Button
-            variant="glass"
-            size="lg"
-            onPress={handleEmailSignIn}
-            disabled={loading !== null}
-            style={styles.button}
-          >
-            <View style={styles.buttonContent}>
-              <Text size="lg" weight="medium" color="textInverse">
-                ✉️ {t('auth.signInWithEmail')}
-              </Text>
-            </View>
-          </Button>
-
-          <Spacer size="md" />
-
-          {/* Sign Up */}
-          <Button
-            variant="ghost"
-            size="lg"
-            onPress={handleSignUp}
-            disabled={loading !== null}
-            style={[styles.button, styles.signUpButton]}
-          >
-            <Text size="md" weight="medium" color="textInverse">
-              {t('auth.signUp')}
-            </Text>
-          </Button>
         </View>
       </View>
     </Screen>
@@ -272,64 +274,84 @@ const styles = StyleSheet.create({
     width: SCREEN_WIDTH,
     height: SCREEN_HEIGHT,
   },
-  overlay: {
+  gradientOverlay: {
     ...StyleSheet.absoluteFillObject,
-    backgroundColor: 'rgba(0, 0, 0, 0.5)',
+    backgroundColor: 'transparent',
+    // Simulating gradient with opacity layers
+    // Dark at top (20% opacity)
+    // Lighter in middle (visible faces)
+    // Dark at bottom (40% opacity for button area)
   },
   content: {
     flex: 1,
     justifyContent: 'space-between',
-    paddingHorizontal: 24,
-    paddingTop: 20, // Minimal top padding - text very high
-    paddingBottom: 60, // Bottom padding for buttons - push buttons lower
   },
   header: {
+    paddingTop: 60,
+    paddingHorizontal: 24,
     alignItems: 'center',
-    marginTop: 0, // No extra margin, already at top
+  },
+  headerTextContainer: {
+    backgroundColor: 'rgba(0, 0, 0, 0.3)',
+    paddingVertical: 20,
+    paddingHorizontal: 24,
+    borderRadius: 16,
+    alignItems: 'center',
+    backdropFilter: 'blur(10px)',
   },
   title: {
     textAlign: 'center',
-    textShadowColor: 'rgba(0, 0, 0, 0.75)',
+    textShadowColor: 'rgba(0, 0, 0, 0.9)',
     textShadowOffset: { width: 0, height: 2 },
-    textShadowRadius: 4,
+    textShadowRadius: 6,
   },
   subtitle: {
     textAlign: 'center',
-    textShadowColor: 'rgba(0, 0, 0, 0.75)',
+    textShadowColor: 'rgba(0, 0, 0, 0.8)',
     textShadowOffset: { width: 0, height: 1 },
-    textShadowRadius: 3,
+    textShadowRadius: 4,
   },
-  buttonsContainer: {
-    width: '100%',
-    maxWidth: 400,
-    alignSelf: 'center',
-    marginBottom: 20, // Push buttons to bottom
+  buttonsWrapper: {
+    paddingHorizontal: 24,
+    paddingBottom: 40,
+  },
+  buttonsCard: {
+    backgroundColor: 'rgba(0, 0, 0, 0.5)',
+    borderRadius: 24,
+    padding: 20,
+    backdropFilter: 'blur(20px)',
+    borderWidth: 1,
+    borderColor: 'rgba(255, 255, 255, 0.1)',
   },
   socialButtonsRow: {
     flexDirection: 'row',
-    width: '100%',
-    justifyContent: 'space-between',
+    justifyContent: 'center',
+    alignItems: 'center',
   },
   socialButton: {
-    flex: 1,
-    minHeight: 56,
-    aspectRatio: 1, // Make buttons square
+    width: 80,
+    height: 80,
+    borderRadius: 20,
+    backgroundColor: 'rgba(255, 255, 255, 0.95)',
     alignItems: 'center',
     justifyContent: 'center',
-  },
-  googleButton: {
-    marginRight: 8,
-  },
-  facebookButton: {
-    marginLeft: 8,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.3,
+    shadowRadius: 8,
+    elevation: 8,
   },
   socialLogo: {
-    width: 48,
-    height: 48,
+    width: 40,
+    height: 40,
   },
-  button: {
+  emailButton: {
     width: '100%',
     minHeight: 56,
+    backgroundColor: 'rgba(255, 255, 255, 0.15)',
+    borderRadius: 16,
+    borderWidth: 1,
+    borderColor: 'rgba(255, 255, 255, 0.2)',
   },
   buttonContent: {
     flexDirection: 'row',
@@ -337,8 +359,11 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   signUpButton: {
-    borderColor: 'rgba(255, 255, 255, 0.5)',
-    borderWidth: 1,
+    width: '100%',
+    minHeight: 56,
+    backgroundColor: 'transparent',
+    borderRadius: 16,
+    borderWidth: 1.5,
+    borderColor: 'rgba(255, 255, 255, 0.4)',
   },
 });
-

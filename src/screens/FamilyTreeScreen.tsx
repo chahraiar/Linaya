@@ -1,5 +1,5 @@
 import React, { useEffect, useState, useRef } from 'react';
-import { View, StyleSheet, TouchableOpacity, TextInput, Modal, Pressable, Platform, Animated, PanResponder, Dimensions, GestureResponderEvent } from 'react-native';
+import { View, StyleSheet, TouchableOpacity, TextInput, Modal, Pressable, Platform, Animated, PanResponder, Dimensions, GestureResponderEvent, Alert, ActivityIndicator } from 'react-native';
 import { useNavigation } from '@react-navigation/native';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { useTranslation } from 'react-i18next';
@@ -10,8 +10,17 @@ import { useSettingsStore } from '../store/settingsStore';
 import { createClusters } from '../features/familyTree/layout';
 import { Cluster } from '../features/familyTree/types';
 import { TreeRenderer } from '../features/familyTree/TreeRenderer';
-import { mockPersons } from '../features/familyTree/mockData';
 import { RootStackParamList } from '../navigation/navigation';
+import { 
+  getCurrentUserProfile, 
+  getUserTrees, 
+  getTreeData, 
+  createTree, 
+  createPersonFromProfile,
+  Profile,
+  Tree 
+} from '../services/treeService';
+import { supabase } from '../lib/supabase';
 
 const { width: SCREEN_WIDTH, height: SCREEN_HEIGHT } = Dimensions.get('window');
 const MIN_SCALE = 0.3;
@@ -28,6 +37,12 @@ export const FamilyTreeScreen: React.FC = () => {
   const [clusters, setClusters] = useState<Cluster[]>([]);
   const [searchQuery, setSearchQuery] = useState('');
   const [showAddMenu, setShowAddMenu] = useState(false);
+  
+  // User and tree state
+  const [profile, setProfile] = useState<Profile | null>(null);
+  const [currentTree, setCurrentTree] = useState<Tree | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [creatingTree, setCreatingTree] = useState(false);
   
   // Animation values for zoom and pan - using absolute values (no offsets)
   const scaleAnim = useRef(new Animated.Value(DEFAULT_SCALE)).current;
@@ -52,13 +67,218 @@ export const FamilyTreeScreen: React.FC = () => {
     console.log('🎬 Initialized scaleAnim - value:', DEFAULT_SCALE);
   }, []);
 
-  // Initialize with mock data
+  // Load user profile and tree on mount
   useEffect(() => {
-    if (Object.keys(persons).length === 0) {
-      console.log('Initializing with mock data:', mockPersons.length, 'persons');
-      setPersons(mockPersons);
-    }
+    loadUserData();
   }, []);
+
+  const loadUserData = async () => {
+    try {
+      setLoading(true);
+      console.log('🔄 Starting loadUserData...');
+      
+      // Check if user is authenticated
+      const { data: { user }, error: userError } = await supabase.auth.getUser();
+      if (userError) {
+        console.error('❌ Error getting user:', userError);
+        throw userError;
+      }
+      
+      if (!user) {
+        console.log('⚠️ No user, redirecting to login');
+        navigation.replace('Login');
+        setLoading(false);
+        return;
+      }
+
+      console.log('✅ User authenticated:', user.id);
+
+      // Load profile
+      console.log('📋 Loading profile...');
+      const userProfile = await getCurrentUserProfile();
+      console.log('📋 Profile loaded:', userProfile ? 'OK' : 'NULL');
+      setProfile(userProfile);
+
+      // Load user's trees
+      console.log('🌳 Loading trees...');
+      const trees = await getUserTrees();
+      console.log('🌳 Trees loaded:', trees.length, 'tree(s)');
+      
+      if (trees.length > 0) {
+        // Use the first tree (or most recent)
+        const tree = trees[0];
+        console.log('🌳 Using tree:', tree.id, tree.name);
+        setCurrentTree(tree);
+        
+        // Load tree data
+        console.log('👥 Loading tree persons...');
+        const { persons: treePersons } = await getTreeData(tree.id);
+        console.log('👥 Persons loaded:', treePersons.length, 'person(s)');
+        if (treePersons.length > 0) {
+          setPersons(treePersons);
+        } else {
+          setPersons([]);
+        }
+      } else {
+        // No tree yet
+        console.log('🌳 No trees found');
+        setCurrentTree(null);
+        setPersons([]);
+      }
+      
+      console.log('✅ loadUserData completed');
+    } catch (error) {
+      console.error('❌ Error loading user data:', error);
+      Alert.alert(
+        t('common.error'), 
+        `Erreur lors du chargement des données: ${error instanceof Error ? error.message : 'Erreur inconnue'}`
+      );
+      // Ensure loading is set to false even on error
+      setCurrentTree(null);
+      setPersons([]);
+    } finally {
+      console.log('🏁 Setting loading to false');
+      setLoading(false);
+    }
+  };
+
+  const handleCreateTree = async () => {
+    // Get profile (reload if needed)
+    let profileToUse = profile;
+    if (!profileToUse) {
+      console.log('⚠️ Profile is null, reloading...');
+      profileToUse = await getCurrentUserProfile();
+      if (profileToUse) {
+        setProfile(profileToUse);
+      }
+    }
+
+    if (!profileToUse) {
+      console.error('❌ Cannot create tree: profile is null');
+      Alert.alert(t('common.error'), 'Profil utilisateur non disponible. Veuillez vous reconnecter.');
+      return;
+    }
+
+    try {
+      setCreatingTree(true);
+      console.log('🌳 Creating tree for profile:', profileToUse.display_name);
+
+      // Create tree
+      const treeName = profileToUse.display_name 
+        ? `Arbre de ${profileToUse.display_name}`
+        : 'Mon arbre généalogique';
+      
+      console.log('🌳 Creating tree with name:', treeName);
+      const newTree = await createTree(treeName);
+      
+      if (!newTree) {
+        console.error('❌ Tree creation returned null');
+        Alert.alert(t('common.error'), 'Erreur lors de la création de l\'arbre');
+        setCreatingTree(false);
+        return;
+      }
+
+      console.log('✅ Tree created:', newTree.id);
+
+      // Create person from profile
+      console.log('👤 Creating person from profile...');
+      const person = await createPersonFromProfile(newTree.id, profileToUse!);
+      
+      if (!person) {
+        console.error('❌ Person creation returned null');
+        Alert.alert(t('common.error'), 'Erreur lors de la création de la personne');
+        setCreatingTree(false);
+        // Tree was created, reload data to show it
+        await loadUserData();
+        return;
+      }
+
+      console.log('✅ Person created:', person.id);
+
+      // Update state
+      setCurrentTree(newTree);
+      setPersons([person]);
+      
+      console.log('✅ Tree and person created successfully');
+      
+      Alert.alert(
+        t('tree.treeCreated'),
+        t('tree.treeCreatedMessage'),
+        [{ 
+          text: t('common.ok'),
+          onPress: () => {
+            // Reload data to ensure consistency
+            loadUserData();
+          }
+        }]
+      );
+    } catch (error) {
+      console.error('❌ Error creating tree:', error);
+      Alert.alert(
+        t('common.error'), 
+        `Erreur lors de la création de l'arbre: ${error instanceof Error ? error.message : 'Erreur inconnue'}`
+      );
+    } finally {
+      setCreatingTree(false);
+    }
+  };
+
+  const handleCreateFirstPerson = async () => {
+    if (!currentTree || !profile) {
+      console.error('❌ Cannot create person: tree or profile is null');
+      Alert.alert(t('common.error'), 'Données manquantes');
+      return;
+    }
+
+    // Get profile (reload if needed)
+    let profileToUse: Profile | null = profile;
+    if (!profileToUse) {
+      console.log('⚠️ Profile is null, reloading...');
+      profileToUse = await getCurrentUserProfile();
+      if (profileToUse) {
+        setProfile(profileToUse);
+      }
+    }
+
+    if (!profileToUse) {
+      console.error('❌ Cannot create person: profile is null');
+      Alert.alert(t('common.error'), 'Profil utilisateur non disponible. Veuillez vous reconnecter.');
+      return;
+    }
+
+    try {
+      setCreatingTree(true);
+      console.log('👤 Creating first person from profile for tree:', currentTree.id);
+
+      // Create person from profile
+      const person = await createPersonFromProfile(currentTree.id, profileToUse);
+      
+      if (!person) {
+        console.error('❌ Person creation returned null');
+        Alert.alert(t('common.error'), 'Erreur lors de la création de la personne');
+        setCreatingTree(false);
+        return;
+      }
+
+      console.log('✅ Person created:', person.id);
+
+      // Update state
+      setPersons([person]);
+      
+      console.log('✅ First person created successfully');
+      
+      // Reload data to ensure consistency
+      await loadUserData();
+    } catch (error) {
+      console.error('❌ Error creating person:', error);
+      Alert.alert(
+        t('common.error'), 
+        `Erreur lors de la création de la personne: ${error instanceof Error ? error.message : 'Erreur inconnue'}`
+      );
+    } finally {
+      setCreatingTree(false);
+    }
+  };
 
   // Update clusters when persons change
   useEffect(() => {
@@ -353,9 +573,19 @@ export const FamilyTreeScreen: React.FC = () => {
     <Screen gradient={false} style={{ backgroundColor: '#FAF9F6' }}>
       {/* Header */}
       <View style={[styles.header, { backgroundColor: 'rgba(255, 255, 255, 0.95)' }]}>
-        <Text variant="heading" style={[styles.headerTitle, { color: '#1A1A1A' }]}>
-          {t('tree.title')}
-        </Text>
+        <View style={styles.headerLeft}>
+          <Text variant="heading" style={[styles.headerTitle, { color: '#1A1A1A' }]}>
+            {t('tree.title')}
+          </Text>
+          {profile && (
+            <>
+              <Spacer size="xs" horizontal />
+              <Text variant="body" color="textSecondary">
+                • {profile.display_name || 'Utilisateur'}
+              </Text>
+            </>
+          )}
+        </View>
         <IconButton
           variant="glass"
           onPress={() => navigation.navigate('Settings')}
@@ -364,8 +594,63 @@ export const FamilyTreeScreen: React.FC = () => {
         </IconButton>
       </View>
 
-      {/* Tree Canvas with zoom and pan */}
-      <View style={styles.canvasContainer}>
+      {/* Loading or Empty State */}
+      {loading ? (
+        <View style={styles.centerContainer}>
+          <ActivityIndicator size="large" color={theme.colors.primary} />
+          <Spacer size="md" />
+          <Text variant="body" color="textSecondary">
+            {t('common.loading')}
+          </Text>
+        </View>
+      ) : !currentTree ? (
+        <View style={styles.centerContainer}>
+          <Text variant="heading" weight="bold" color="text" style={styles.emptyTitle}>
+            {t('tree.noTree')}
+          </Text>
+          <Spacer size="md" />
+          <Text variant="body" color="textSecondary" style={styles.emptyDescription}>
+            {t('tree.noTreeDescription')}
+          </Text>
+          <Spacer size="xl" />
+          <Button
+            variant="primary"
+            size="lg"
+            onPress={handleCreateTree}
+            loading={creatingTree}
+            disabled={creatingTree}
+          >
+            <Text variant="subheading" weight="semibold" color="textInverse">
+              {t('tree.createTreeFromProfile')}
+            </Text>
+          </Button>
+        </View>
+      ) : Object.keys(persons).length === 0 ? (
+        <View style={styles.centerContainer}>
+          <Text variant="heading" weight="bold" color="text" style={styles.emptyTitle}>
+            {t('tree.emptyTree')}
+          </Text>
+          <Spacer size="md" />
+          <Text variant="body" color="textSecondary" style={styles.emptyDescription}>
+            {t('tree.emptyTreeDescription')}
+          </Text>
+          <Spacer size="xl" />
+          <Button
+            variant="primary"
+            size="lg"
+            onPress={handleCreateFirstPerson}
+            loading={creatingTree}
+            disabled={creatingTree}
+          >
+            <Text variant="subheading" weight="semibold" color="textInverse">
+              {t('tree.createFirstPerson')}
+            </Text>
+          </Button>
+        </View>
+      ) : (
+        <>
+          {/* Tree Canvas with zoom and pan */}
+          <View style={styles.canvasContainer}>
         {/* Layer 1: Background PanResponder - ONLY for gestures, invisible */}
         <View
           style={StyleSheet.absoluteFill}
@@ -396,11 +681,7 @@ export const FamilyTreeScreen: React.FC = () => {
               onNodePress={handleNodePress}
               renderLinksOnly={true}
             />
-          ) : (
-            <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center' }} pointerEvents="none">
-              <Text style={{ color: theme.colors.text }}>Chargement de l'arbre...</Text>
-            </View>
-          )}
+          ) : null}
         </Animated.View>
         
         {/* Layer 3: Animated Cards layer - interactive, ABOVE PanResponder */}
@@ -431,8 +712,8 @@ export const FamilyTreeScreen: React.FC = () => {
         
       </View>
 
-      {/* Bottom UI */}
-      <View style={styles.bottomUI}>
+          {/* Bottom UI */}
+          <View style={styles.bottomUI}>
         {/* Search pill */}
         <View style={[styles.searchPill, { backgroundColor: theme.colors.glassBackground, borderColor: theme.colors.glassBorder }]}>
           <Text>🔍</Text>
@@ -468,7 +749,18 @@ export const FamilyTreeScreen: React.FC = () => {
           onPress={() => setShowAddMenu(false)}
         >
           <Card variant="elevated" style={styles.addMenuContent} padding="md">
-            <Button variant="primary" onPress={() => {}}>
+            <Button 
+              variant="primary" 
+              onPress={() => {
+                console.log('➕ Add person button pressed');
+                setShowAddMenu(false);
+                // TODO: Implement add person functionality
+                Alert.alert(
+                  t('tree.addPerson'),
+                  'Fonctionnalité à venir'
+                );
+              }}
+            >
               {t('tree.addPerson')}
             </Button>
             <Spacer size="sm" />
@@ -478,6 +770,8 @@ export const FamilyTreeScreen: React.FC = () => {
           </Card>
         </Pressable>
       </Modal>
+        </>
+      )}
     </Screen>
   );
 };
@@ -495,6 +789,24 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.05,
     shadowRadius: 2,
     elevation: 2,
+  },
+  headerLeft: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    flex: 1,
+  },
+  centerContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    paddingHorizontal: 24,
+  },
+  emptyTitle: {
+    textAlign: 'center',
+  },
+  emptyDescription: {
+    textAlign: 'center',
+    maxWidth: 300,
   },
   headerTitle: {
     fontSize: 24,

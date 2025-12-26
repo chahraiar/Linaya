@@ -28,7 +28,14 @@ export const PersonCard: React.FC<PersonCardProps> = ({
   isSelected = false,
 }) => {
   const { theme } = useTheme();
-  const fullName = `${person.firstName} ${person.lastName}`;
+  // Build full name, handling empty firstName/lastName or email in firstName
+  const firstName = person.firstName?.trim() || '';
+  const lastName = person.lastName?.trim() || '';
+  // If firstName looks like an email, don't use it
+  const isEmail = firstName.includes('@');
+  const fullName = isEmail 
+    ? (lastName || 'Sans nom')
+    : `${firstName} ${lastName}`.trim() || 'Sans nom';
   const dates = person.birthYear
     ? `${person.birthYear}${person.deathYear ? `-${person.deathYear}` : '-'}`
     : '';

@@ -1,13 +1,14 @@
 import React, { useState } from 'react';
-import { View, StyleSheet, ScrollView, Image, TouchableOpacity, Linking, Pressable } from 'react-native';
+import { View, StyleSheet, ScrollView, Image, TouchableOpacity, Linking, Pressable, Alert, TextInput } from 'react-native';
 import { useRoute, useNavigation, RouteProp } from '@react-navigation/native';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { useTranslation } from 'react-i18next';
 import { useTheme } from '../design-system/ThemeProvider';
-import { Screen, Text, Button, IconButton, Card, Spacer } from '../components/ui';
+import { Screen, Text, Button, IconButton, Card, Spacer, Input } from '../components/ui';
 import { useFamilyTreeStore } from '../store/familyTreeStore';
 import { usePersonDetailStore } from '../store/personDetailStore';
 import { RootStackParamList } from '../navigation/navigation';
+import { updatePerson } from '../services/treeService';
 
 type PersonDetailRouteProp = RouteProp<RootStackParamList, 'PersonDetail'>;
 type NavigationProp = NativeStackNavigationProp<RootStackParamList>;
@@ -23,12 +24,28 @@ export const PersonDetailScreen: React.FC = () => {
   
   console.log('📱 PersonDetailScreen mounted with personId:', personId);
   
-  const { getPerson } = useFamilyTreeStore();
+  const { getPerson, updatePerson: updatePersonInStore } = useFamilyTreeStore();
   const { getPersonDetails } = usePersonDetailStore();
   const [activeTab, setActiveTab] = useState<TabType>('data');
+  const [isEditing, setIsEditing] = useState(false);
+  const [editedFirstName, setEditedFirstName] = useState('');
+  const [editedLastName, setEditedLastName] = useState('');
+  const [editedBirthYear, setEditedBirthYear] = useState('');
+  const [editedDeathYear, setEditedDeathYear] = useState('');
+  const [isSaving, setIsSaving] = useState(false);
   
   const person = personId ? getPerson(personId) : null;
   const details = personId ? getPersonDetails(personId) : null;
+
+  // Initialize edit fields when entering edit mode
+  React.useEffect(() => {
+    if (person && isEditing) {
+      setEditedFirstName(person.firstName || '');
+      setEditedLastName(person.lastName || '');
+      setEditedBirthYear(person.birthYear?.toString() || '');
+      setEditedDeathYear(person.deathYear?.toString() || '');
+    }
+  }, [person, isEditing]);
   
   console.log('📱 PersonDetailScreen - person:', person ? `${person.firstName} ${person.lastName}` : 'null');
   
@@ -44,8 +61,49 @@ export const PersonDetailScreen: React.FC = () => {
     );
   }
   
-  const fullName = `${person.firstName} ${person.lastName}`;
+  const fullName = `${person.firstName} ${person.lastName}`.trim() || 'Sans nom';
   const birthDate = person.birthYear ? new Date(person.birthYear, 0, 1).toLocaleDateString('fr-FR', { year: 'numeric' }) : null;
+
+  const handleSave = async () => {
+    if (!person || !personId) return;
+
+    setIsSaving(true);
+    try {
+      const birthYear = editedBirthYear ? parseInt(editedBirthYear, 10) : undefined;
+      const deathYear = editedDeathYear ? parseInt(editedDeathYear, 10) : undefined;
+      
+      const birthDateStr = birthYear ? `${birthYear}-01-01` : null;
+      const deathDateStr = deathYear ? `${deathYear}-01-01` : null;
+
+      const updatedPerson = await updatePerson(personId, {
+        firstName: editedFirstName.trim() || undefined,
+        lastName: editedLastName.trim() || undefined,
+        displayName: `${editedFirstName.trim()} ${editedLastName.trim()}`.trim() || undefined,
+        birthDate: birthDateStr,
+        deathDate: deathDateStr,
+      });
+
+      if (updatedPerson) {
+        // Update in store
+        updatePersonInStore(personId, {
+          firstName: updatedPerson.firstName,
+          lastName: updatedPerson.lastName,
+          birthYear: updatedPerson.birthYear,
+          deathYear: updatedPerson.deathYear,
+        });
+
+        setIsEditing(false);
+        Alert.alert(t('common.save'), 'Modifications enregistrées');
+      } else {
+        Alert.alert(t('common.error'), 'Erreur lors de la sauvegarde');
+      }
+    } catch (error) {
+      console.error('Error saving person:', error);
+      Alert.alert(t('common.error'), 'Erreur lors de la sauvegarde');
+    } finally {
+      setIsSaving(false);
+    }
+  };
   
   return (
     <Screen gradient={false} style={{ backgroundColor: '#FAF9F6' }}>
@@ -57,8 +115,8 @@ export const PersonDetailScreen: React.FC = () => {
         <Text variant="heading" style={styles.headerTitle}>
           {t('person.profile')}
         </Text>
-        <IconButton variant="default" onPress={() => {}}>
-          <Text>⋯</Text>
+        <IconButton variant="default" onPress={() => setIsEditing(!isEditing)}>
+          <Text>{isEditing ? '✕' : '✏️'}</Text>
         </IconButton>
       </View>
       
@@ -74,20 +132,76 @@ export const PersonDetailScreen: React.FC = () => {
             </TouchableOpacity>
           </View>
           
-          <Text variant="heading" style={[styles.name, { color: theme.colors.text }]}>
-            {fullName}
-          </Text>
-          
-          {person.birthYear && (
-            <Text style={[styles.birthInfo, { color: theme.colors.textSecondary }]}>
-              {t('person.born')} : {person.birthYear} {person.deathYear ? `• ${t('person.died')} : ${person.deathYear}` : ''}
-            </Text>
+          {isEditing ? (
+            <>
+              <Input
+                label={t('person.firstName')}
+                value={editedFirstName}
+                onChangeText={setEditedFirstName}
+                placeholder={t('person.firstName')}
+                style={styles.editInput}
+              />
+              <Spacer size="sm" />
+              <Input
+                label={t('person.lastName')}
+                value={editedLastName}
+                onChangeText={setEditedLastName}
+                placeholder={t('person.lastName')}
+                style={styles.editInput}
+              />
+              <Spacer size="sm" />
+              <Input
+                label={t('person.birthYear')}
+                value={editedBirthYear}
+                onChangeText={setEditedBirthYear}
+                placeholder="YYYY"
+                keyboardType="numeric"
+                style={styles.editInput}
+              />
+              <Spacer size="sm" />
+              <Input
+                label={t('person.deathYear')}
+                value={editedDeathYear}
+                onChangeText={setEditedDeathYear}
+                placeholder="YYYY"
+                keyboardType="numeric"
+                style={styles.editInput}
+              />
+              <Spacer size="md" />
+              <View style={styles.editButtons}>
+                <Button
+                  variant="secondary"
+                  onPress={() => setIsEditing(false)}
+                  disabled={isSaving}
+                  style={styles.editButton}
+                >
+                  {t('common.cancel')}
+                </Button>
+                <Spacer size="sm" horizontal />
+                <Button
+                  variant="primary"
+                  onPress={handleSave}
+                  loading={isSaving}
+                  disabled={isSaving}
+                  style={styles.editButton}
+                >
+                  {t('common.save')}
+                </Button>
+              </View>
+            </>
+          ) : (
+            <>
+              <Text variant="heading" style={[styles.name, { color: theme.colors.text }]}>
+                {fullName}
+              </Text>
+              
+              {person.birthYear && (
+                <Text style={[styles.birthInfo, { color: theme.colors.textSecondary }]}>
+                  {t('person.born')} : {person.birthYear} {person.deathYear ? `• ${t('person.died')} : ${person.deathYear}` : ''}
+                </Text>
+              )}
+            </>
           )}
-          
-          <Spacer size="sm" />
-          <Button variant="secondary" onPress={() => {}}>
-            {t('common.search')}
-          </Button>
         </View>
         
         {/* Tabs */}
@@ -718,6 +832,23 @@ const styles = StyleSheet.create({
   },
   relativeDates: {
     fontSize: 12,
+  },
+  editInput: {
+    width: '100%',
+  },
+  editButtons: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    width: '100%',
+  },
+  editButton: {
+    flex: 1,
+  },
+  emptyField: {
+    fontSize: 14,
+    fontStyle: 'italic',
+    textAlign: 'center',
+    paddingVertical: 16,
   },
 });
 
