@@ -27,6 +27,9 @@ BEGIN
 END;
 $$ LANGUAGE plpgsql SECURITY DEFINER;
 
+-- Fix search_path for security
+ALTER FUNCTION family_tree.is_tree_member(uuid, uuid) SET search_path = family_tree, public;
+
 -- Helper function: Get user role in a tree
 CREATE OR REPLACE FUNCTION family_tree.get_tree_role(p_tree_id uuid, p_user_id uuid)
 RETURNS text AS $$
@@ -41,6 +44,9 @@ BEGIN
   );
 END;
 $$ LANGUAGE plpgsql SECURITY DEFINER;
+
+-- Fix search_path for security
+ALTER FUNCTION family_tree.get_tree_role(uuid, uuid) SET search_path = family_tree, public;
 
 -- ============================================================================
 -- PROFILES POLICIES

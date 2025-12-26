@@ -32,6 +32,9 @@ BEGIN
 END;
 $$ LANGUAGE plpgsql SECURITY DEFINER;
 
+-- Fix search_path for security
+ALTER FUNCTION family_tree.get_user_trees(uuid) SET search_path = family_tree, public;
+
 -- ============================================================================
 -- FUNCTION: Get all members of a tree
 -- ============================================================================
@@ -66,11 +69,15 @@ BEGIN
 END;
 $$ LANGUAGE plpgsql SECURITY DEFINER;
 
+-- Fix search_path for security
+ALTER FUNCTION family_tree.get_tree_members(uuid) SET search_path = family_tree, public;
+
 -- ============================================================================
 -- FUNCTION: Calculate relationship between two persons
 -- ============================================================================
 -- This is a simplified version - a full implementation would require
 -- graph traversal algorithms (BFS/DFS) to find the shortest path
+-- Note: type='parent' means from_person_id is parent of to_person_id
 CREATE OR REPLACE FUNCTION family_tree.calculate_relationship(
   p_person_a_id uuid,
   p_person_b_id uuid
@@ -86,6 +93,7 @@ BEGIN
   END IF;
 
   -- Check direct parent-child relationship
+  -- A is parent of B: from=A, to=B, type=parent
   IF EXISTS (
     SELECT 1 FROM family_tree.person_relationships
     WHERE from_person_id = p_person_a_id
@@ -95,6 +103,7 @@ BEGIN
     RETURN 'parent';
   END IF;
 
+  -- B is parent of A: from=B, to=A, type=parent
   IF EXISTS (
     SELECT 1 FROM family_tree.person_relationships
     WHERE from_person_id = p_person_b_id
@@ -117,6 +126,7 @@ BEGIN
   END IF;
 
   -- Check sibling relationship (same parents)
+  -- Two persons are siblings if they share the same parent
   IF EXISTS (
     SELECT 1
     FROM family_tree.person_relationships r1
@@ -137,9 +147,16 @@ BEGIN
 END;
 $$ LANGUAGE plpgsql SECURITY DEFINER;
 
+-- Fix search_path for security
+ALTER FUNCTION family_tree.calculate_relationship(uuid, uuid) SET search_path = family_tree, public;
+
 -- ============================================================================
 -- FUNCTION: Get person with all relationships
 -- ============================================================================
+-- Note: type='parent' means from_person_id is parent of to_person_id
+-- So for person X:
+--   Parents = relationships where to_person_id = X (from is the parent)
+--   Children = relationships where from_person_id = X (to is the child)
 CREATE OR REPLACE FUNCTION family_tree.get_person_with_relationships(p_person_id uuid)
 RETURNS jsonb AS $$
 DECLARE
@@ -149,20 +166,20 @@ BEGIN
     'person', row_to_json(p.*),
     'parents', (
       SELECT jsonb_agg(jsonb_build_object(
-        'id', pr.to_person_id,
+        'id', pr.from_person_id,
         'type', 'parent'
       ))
       FROM family_tree.person_relationships pr
-      WHERE pr.from_person_id = p_person_id
+      WHERE pr.to_person_id = p_person_id
         AND pr.type = 'parent'
     ),
     'children', (
       SELECT jsonb_agg(jsonb_build_object(
-        'id', pr.from_person_id,
+        'id', pr.to_person_id,
         'type', 'child'
       ))
       FROM family_tree.person_relationships pr
-      WHERE pr.to_person_id = p_person_id
+      WHERE pr.from_person_id = p_person_id
         AND pr.type = 'parent'
     ),
     'partners', (
@@ -188,6 +205,9 @@ BEGIN
   RETURN v_result;
 END;
 $$ LANGUAGE plpgsql SECURITY DEFINER;
+
+-- Fix search_path for security
+ALTER FUNCTION family_tree.get_person_with_relationships(uuid) SET search_path = family_tree, public;
 
 -- Comments
 COMMENT ON FUNCTION family_tree.get_user_trees IS 'Get all trees where a user is a member';
