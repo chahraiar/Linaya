@@ -19,6 +19,18 @@
     "addChild": "Ajouter enfant",
     "personDetails": "Détails de la personne"
   },
+  "auth": {
+    "welcome": "Bienvenue dans Linaya",
+    "subtitle": "Créez et partagez votre arbre généalogique",
+    "signInWithGoogle": "Se connecter avec Google",
+    "signInWithFacebook": "Se connecter avec Facebook",
+    "signInWithEmail": "Se connecter avec email",
+    "signUp": "S'inscrire",
+    "error": "Erreur",
+    "googleError": "Erreur lors de la connexion avec Google",
+    "facebookError": "Erreur lors de la connexion avec Facebook",
+    "emailError": "Erreur lors de la connexion avec email"
+  },
   "person": {
     "firstName": "Prénom",
     "lastName": "Nom",

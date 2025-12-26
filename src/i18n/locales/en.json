@@ -19,6 +19,18 @@
     "addChild": "Add child",
     "personDetails": "Person details"
   },
+  "auth": {
+    "welcome": "Welcome to Linaya",
+    "subtitle": "Create and share your family tree",
+    "signInWithGoogle": "Sign in with Google",
+    "signInWithFacebook": "Sign in with Facebook",
+    "signInWithEmail": "Sign in with email",
+    "signUp": "Sign up",
+    "error": "Error",
+    "googleError": "Error signing in with Google",
+    "facebookError": "Error signing in with Facebook",
+    "emailError": "Error signing in with email"
+  },
   "person": {
     "firstName": "First name",
     "lastName": "Last name",

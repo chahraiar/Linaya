@@ -4,8 +4,10 @@ import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import { FamilyTreeScreen } from '../screens/FamilyTreeScreen';
 import { SettingsScreen } from '../screens/SettingsScreen';
 import { PersonDetailScreen } from '../screens/PersonDetailScreen';
+import { LoginScreen } from '../screens/LoginScreen';
 
 export type RootStackParamList = {
+  Login: undefined;
   FamilyTree: undefined;
   Settings: undefined;
   PersonDetail: { personId: string };
@@ -21,7 +23,9 @@ export const AppNavigation: React.FC = () => {
           headerShown: false,
           animation: 'fade',
         }}
+        initialRouteName="Login"
       >
+        <Stack.Screen name="Login" component={LoginScreen} />
         <Stack.Screen name="FamilyTree" component={FamilyTreeScreen} />
         <Stack.Screen name="Settings" component={SettingsScreen} />
         <Stack.Screen 
