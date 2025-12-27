@@ -1,8 +1,9 @@
-import React from 'react';
-import { View, StyleSheet, TouchableOpacity } from 'react-native';
+import React, { useState, useEffect } from 'react';
+import { View, StyleSheet, TouchableOpacity, Image } from 'react-native';
 import { Text } from '../../components/ui/Text';
 import { useTheme } from '../../design-system/ThemeProvider';
 import { Person } from '../../store/familyTreeStore';
+import { getPersonPhotoUrl } from '../../services/treeService';
 
 interface PersonCardProps {
   person: Person;
@@ -12,7 +13,7 @@ interface PersonCardProps {
 
 const AVATAR_SIZE = 60;
 const CARD_WIDTH = 150;
-const CARD_HEIGHT = 130;
+const CARD_HEIGHT = 160; // ✅ Augmenté pour que la date soit visible
 
 /**
  * Generate a simple avatar placeholder based on person's name
@@ -28,6 +29,22 @@ export const PersonCard: React.FC<PersonCardProps> = ({
   isSelected = false,
 }) => {
   const { theme } = useTheme();
+  const [photoUrl, setPhotoUrl] = useState<string | null>(null);
+
+  // Load photo when person changes
+  useEffect(() => {
+    const loadPhoto = async () => {
+      try {
+        const url = await getPersonPhotoUrl(person.id);
+        setPhotoUrl(url);
+      } catch (error) {
+        console.error('Error loading photo for PersonCard:', error);
+        setPhotoUrl(null);
+      }
+    };
+    loadPhoto();
+  }, [person.id]);
+
   // Build full name, handling empty firstName/lastName or email in firstName
   const firstName = person.firstName?.trim() || '';
   const lastName = person.lastName?.trim() || '';
@@ -71,17 +88,25 @@ export const PersonCard: React.FC<PersonCardProps> = ({
     >
       {/* Avatar */}
       <View style={styles.avatarContainer}>
-        <View
-          style={[
-            styles.avatar,
-            {
-              backgroundColor: theme.colors.primary + '15',
-              borderColor: theme.colors.primary + '30',
-            },
-          ]}
-        >
-          <Text style={styles.avatarText}>{getAvatarPlaceholder(person)}</Text>
-        </View>
+        {photoUrl ? (
+          <Image
+            source={{ uri: photoUrl }}
+            style={styles.avatarImage}
+            resizeMode="cover"
+          />
+        ) : (
+          <View
+            style={[
+              styles.avatar,
+              {
+                backgroundColor: theme.colors.primary + '15',
+                borderColor: theme.colors.primary + '30',
+              },
+            ]}
+          >
+            <Text style={styles.avatarText}>{getAvatarPlaceholder(person)}</Text>
+          </View>
+        )}
       </View>
 
       {/* Name */}
@@ -111,8 +136,9 @@ export const PersonCard: React.FC<PersonCardProps> = ({
 const styles = StyleSheet.create({
   card: {
     width: CARD_WIDTH,
-    height: CARD_HEIGHT,
-    paddingVertical: 12,
+    minHeight: CARD_HEIGHT, // ✅ Utilise minHeight pour flexibilité
+    paddingTop: 12,
+    paddingBottom: 20, // ✅ Plus d'espace en bas pour la date
     paddingHorizontal: 10,
     alignItems: 'center',
     justifyContent: 'flex-start',
@@ -129,6 +155,13 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     backgroundColor: '#F5F5F5',
   },
+  avatarImage: {
+    width: AVATAR_SIZE,
+    height: AVATAR_SIZE,
+    borderRadius: AVATAR_SIZE / 2,
+    borderWidth: 2,
+    borderColor: '#E0E0E0',
+  },
   avatarText: {
     fontSize: 24,
   },
@@ -143,6 +176,8 @@ const styles = StyleSheet.create({
     fontSize: 12,
     textAlign: 'center',
     lineHeight: 15,
+    marginTop: 2, // ✅ Espacement supplémentaire
+    marginBottom: 0, // ✅ Pas de marginBottom pour éviter le débordement
   },
 });
 

@@ -1,10 +1,9 @@
 import React, { useState } from 'react';
-import { View, StyleSheet, ScrollView, Alert, KeyboardAvoidingView, Platform } from 'react-native';
+import { View, StyleSheet, ScrollView, Alert, KeyboardAvoidingView, Platform, TextInput, TouchableOpacity } from 'react-native';
 import { useNavigation } from '@react-navigation/native';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { useTranslation } from 'react-i18next';
-import { useTheme } from '../design-system/ThemeProvider';
-import { Button, Text, Screen, Input } from '../components/ui';
+import { Button, Text, Screen } from '../components/ui';
 import { Spacer } from '../components/ui/Spacer';
 import { supabase, isSupabaseReady } from '../lib/supabase';
 import { RootStackParamList } from '../navigation/navigation';
@@ -12,13 +11,14 @@ import { RootStackParamList } from '../navigation/navigation';
 type NavigationProp = NativeStackNavigationProp<RootStackParamList>;
 
 export const SignUpScreen: React.FC = () => {
-  const { theme } = useTheme();
   const { t } = useTranslation();
   const navigation = useNavigation<NavigationProp>();
   const [loading, setLoading] = useState(false);
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
+  const [showPassword, setShowPassword] = useState(false);
+  const [showConfirmPassword, setShowConfirmPassword] = useState(false);
   const [errors, setErrors] = useState<{
     email?: string;
     password?: string;
@@ -84,7 +84,6 @@ export const SignUpScreen: React.FC = () => {
             {
               text: t('common.ok'),
               onPress: () => {
-                // Navigate to login or family tree screen
                 navigation.navigate('Login');
               },
             },
@@ -103,7 +102,7 @@ export const SignUpScreen: React.FC = () => {
   };
 
   return (
-    <Screen style={styles.container}>
+    <Screen style={styles.container} noThemeBackground={true}>
       <KeyboardAvoidingView
         behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
         style={styles.keyboardView}
@@ -115,11 +114,11 @@ export const SignUpScreen: React.FC = () => {
           <View style={styles.content}>
             {/* Header */}
             <View style={styles.header}>
-              <Text variant="display" weight="bold" color="text" style={styles.title}>
+              <Text variant="display" weight="bold" style={styles.title}>
                 {t('auth.signUp')}
               </Text>
               <Spacer size="sm" />
-              <Text variant="body" color="textSecondary" style={styles.subtitle}>
+              <Text variant="body" style={styles.subtitle}>
                 {t('auth.signUpSubtitle')}
               </Text>
             </View>
@@ -128,56 +127,113 @@ export const SignUpScreen: React.FC = () => {
 
             {/* Form */}
             <View style={styles.form}>
-              <Input
-                label={t('auth.email')}
-                placeholder={t('auth.emailPlaceholder')}
-                value={email}
-                onChangeText={(text) => {
-                  setEmail(text);
-                  if (errors.email) {
-                    setErrors({ ...errors, email: undefined });
-                  }
-                }}
-                error={errors.email}
-                autoCapitalize="none"
-                keyboardType="email-address"
-                autoComplete="email"
-                textContentType="emailAddress"
-              />
+              {/* Email Input */}
+              <View style={styles.inputContainer}>
+                <Text variant="body" weight="medium" style={styles.label}>
+                  {t('auth.email')}
+                </Text>
+                <View style={styles.inputWrapper}>
+                  <TextInput
+                    style={styles.input}
+                    placeholder={t('auth.emailPlaceholder')}
+                    placeholderTextColor="#999999"
+                    value={email}
+                    onChangeText={(text) => {
+                      setEmail(text);
+                      if (errors.email) {
+                        setErrors({ ...errors, email: undefined });
+                      }
+                    }}
+                    autoCapitalize="none"
+                    keyboardType="email-address"
+                    autoComplete="email"
+                    textContentType="emailAddress"
+                  />
+                </View>
+                {errors.email && (
+                  <Text variant="caption" style={styles.error}>
+                    {errors.email}
+                  </Text>
+                )}
+              </View>
 
-              <Input
-                label={t('auth.password')}
-                placeholder={t('auth.passwordPlaceholder')}
-                value={password}
-                onChangeText={(text) => {
-                  setPassword(text);
-                  if (errors.password) {
-                    setErrors({ ...errors, password: undefined });
-                  }
-                }}
-                error={errors.password}
-                secureTextEntry
-                autoCapitalize="none"
-                autoComplete="password-new"
-                textContentType="newPassword"
-              />
+              {/* Password Input */}
+              <View style={styles.inputContainer}>
+                <Text variant="body" weight="medium" style={styles.label}>
+                  {t('auth.password')}
+                </Text>
+                <View style={styles.inputWrapper}>
+                  <TextInput
+                    style={styles.passwordInput}
+                    placeholder={t('auth.passwordPlaceholder')}
+                    placeholderTextColor="#999999"
+                    value={password}
+                    onChangeText={(text) => {
+                      setPassword(text);
+                      if (errors.password) {
+                        setErrors({ ...errors, password: undefined });
+                      }
+                    }}
+                    secureTextEntry={!showPassword}
+                    autoCapitalize="none"
+                    autoComplete="password-new"
+                    textContentType="newPassword"
+                  />
+                  <TouchableOpacity
+                    onPress={() => setShowPassword(!showPassword)}
+                    style={styles.eyeButton}
+                    hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+                  >
+                    <Text style={styles.eyeIcon}>
+                      {showPassword ? '👁️' : '👁️‍🗨️'}
+                    </Text>
+                  </TouchableOpacity>
+                </View>
+                {errors.password && (
+                  <Text variant="caption" style={styles.error}>
+                    {errors.password}
+                  </Text>
+                )}
+              </View>
 
-              <Input
-                label={t('auth.confirmPassword')}
-                placeholder={t('auth.confirmPasswordPlaceholder')}
-                value={confirmPassword}
-                onChangeText={(text) => {
-                  setConfirmPassword(text);
-                  if (errors.confirmPassword) {
-                    setErrors({ ...errors, confirmPassword: undefined });
-                  }
-                }}
-                error={errors.confirmPassword}
-                secureTextEntry
-                autoCapitalize="none"
-                autoComplete="password-new"
-                textContentType="newPassword"
-              />
+              {/* Confirm Password Input */}
+              <View style={styles.inputContainer}>
+                <Text variant="body" weight="medium" style={styles.label}>
+                  {t('auth.confirmPassword')}
+                </Text>
+                <View style={styles.inputWrapper}>
+                  <TextInput
+                    style={styles.passwordInput}
+                    placeholder={t('auth.confirmPasswordPlaceholder')}
+                    placeholderTextColor="#999999"
+                    value={confirmPassword}
+                    onChangeText={(text) => {
+                      setConfirmPassword(text);
+                      if (errors.confirmPassword) {
+                        setErrors({ ...errors, confirmPassword: undefined });
+                      }
+                    }}
+                    secureTextEntry={!showConfirmPassword}
+                    autoCapitalize="none"
+                    autoComplete="password-new"
+                    textContentType="newPassword"
+                  />
+                  <TouchableOpacity
+                    onPress={() => setShowConfirmPassword(!showConfirmPassword)}
+                    style={styles.eyeButton}
+                    hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+                  >
+                    <Text style={styles.eyeIcon}>
+                      {showConfirmPassword ? '👁️' : '👁️‍🗨️'}
+                    </Text>
+                  </TouchableOpacity>
+                </View>
+                {errors.confirmPassword && (
+                  <Text variant="caption" style={styles.error}>
+                    {errors.confirmPassword}
+                  </Text>
+                )}
+              </View>
 
               <Spacer size="lg" />
 
@@ -189,23 +245,24 @@ export const SignUpScreen: React.FC = () => {
                 disabled={loading}
                 style={styles.signUpButton}
               >
-                <Text variant="subheading" weight="semibold" color="textInverse">
+                <Text variant="subheading" weight="semibold" style={{ color: '#FFFFFF' }}>
                   {t('auth.createAccount')}
                 </Text>
               </Button>
 
               <Spacer size="md" />
 
-              <Button
-                variant="ghost"
-                size="md"
+              {/* ✅ Bouton secondaire sans carré blanc */}
+              <TouchableOpacity
                 onPress={() => navigation.goBack()}
                 disabled={loading}
+                style={styles.secondaryButton}
+                activeOpacity={0.7}
               >
-                <Text variant="body" color="textSecondary">
+                <Text variant="body" style={styles.secondaryButtonText}>
                   {t('auth.alreadyHaveAccount')}
                 </Text>
-              </Button>
+              </TouchableOpacity>
             </View>
           </View>
         </ScrollView>
@@ -217,6 +274,7 @@ export const SignUpScreen: React.FC = () => {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
+    backgroundColor: '#F5F5F0',
   },
   keyboardView: {
     flex: 1,
@@ -235,17 +293,95 @@ const styles = StyleSheet.create({
   },
   title: {
     textAlign: 'center',
+    color: '#1a1a2e',
+    fontSize: 32,
+    fontWeight: 'bold',
   },
   subtitle: {
     textAlign: 'center',
+    color: '#666666',
+    fontSize: 16,
   },
   form: {
     width: '100%',
     maxWidth: 400,
     alignSelf: 'center',
   },
+  inputContainer: {
+    marginBottom: 20,
+  },
+  label: {
+    marginBottom: 8,
+    color: '#1a1a2e',
+    fontSize: 16,
+    fontWeight: '500',
+  },
+  inputWrapper: {
+    borderRadius: 12,
+    backgroundColor: '#FFFFFF',
+    borderWidth: 1,
+    borderColor: '#E0E0E0',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.05,
+    shadowRadius: 4,
+    elevation: 2,
+    flexDirection: 'row',
+    alignItems: 'center',
+    position: 'relative',
+  },
+  input: {
+    paddingHorizontal: 16,
+    paddingVertical: 14,
+    fontSize: 16,
+    color: '#1a1a2e',
+    minHeight: 48,
+    flex: 1,
+  },
+  passwordInput: {
+    paddingHorizontal: 16,
+    paddingVertical: 14,
+    paddingRight: 48, // ✅ Espace pour le bouton œil
+    fontSize: 16,
+    color: '#1a1a2e',
+    minHeight: 48,
+    flex: 1,
+  },
+  eyeButton: {
+    position: 'absolute',
+    right: 12,
+    top: 0,
+    bottom: 0,
+    justifyContent: 'center',
+    alignItems: 'center',
+    width: 40,
+  },
+  eyeIcon: {
+    fontSize: 20,
+  },
+  error: {
+    marginTop: 6,
+    color: '#D32F2F',
+    fontSize: 12,
+  },
   signUpButton: {
     width: '100%',
+    backgroundColor: '#1976D2',
+  },
+  // ✅ Bouton secondaire corrigé - pas de fond blanc
+  secondaryButton: {
+    width: '100%',
+    minHeight: 48,
+    paddingVertical: 12,
+    paddingHorizontal: 16,
+    alignItems: 'center',
+    justifyContent: 'center',
+    // Pas de backgroundColor (transparent par défaut)
+    // Pas de borderWidth (pas de bordure)
+    // Pas de shadow
+  },
+  secondaryButtonText: {
+    color: '#666666',
+    fontSize: 16,
   },
 });
-

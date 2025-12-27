@@ -17,11 +17,12 @@ export const graphiteTheme: Theme = {
     surface: 'rgba(255, 255, 255, 0.05)',
     surfaceElevated: 'rgba(255, 255, 255, 0.08)',
     
+    
     // Text
     text: '#FFFFFF',
     textSecondary: 'rgba(255, 255, 255, 0.75)',
     textTertiary: 'rgba(255, 255, 255, 0.5)',
-    textInverse: '#FFFFFF',
+    textInverse: '#1a1a2e', // Dark text for light backgrounds
     
     // Borders
     border: 'rgba(255, 255, 255, 0.15)',

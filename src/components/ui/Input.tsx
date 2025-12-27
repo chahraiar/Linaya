@@ -27,7 +27,7 @@ export const Input: React.FC<InputProps> = ({
   return (
     <View style={[styles.container, containerStyle]}>
       {label && (
-        <Text variant="body" weight="medium" color="text" style={styles.label}>
+        <Text variant="body" weight="medium" style={[styles.label, { color: '#1A1A1A' }]}>
           {label}
         </Text>
       )}
@@ -35,13 +35,13 @@ export const Input: React.FC<InputProps> = ({
         style={[
           styles.input,
           {
-            backgroundColor: theme.colors.surface,
-            borderColor: error ? theme.colors.error : theme.colors.border,
-            color: theme.colors.text,
+            backgroundColor: '#FFFFFF', // Fond blanc fixe pour visibilité
+            borderColor: error ? theme.colors.error : '#E0E0E0', // Bordure grise fixe
+            color: '#1A1A1A', // Texte sombre fixe pour visibilité
           },
           style,
         ]}
-        placeholderTextColor={theme.colors.textTertiary}
+        placeholderTextColor="#999999" // Placeholder gris fixe
         {...props}
       />
       {error && (

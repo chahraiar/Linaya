@@ -21,7 +21,7 @@ export const SettingsScreen: React.FC = () => {
   const themes: ThemeName[] = ['Aurora', 'Graphite', 'Ivory'];
 
   return (
-    <Screen>
+    <Screen style={{ backgroundColor: '#F5F5F0' }}>
       <ScrollView style={styles.container} contentContainerStyle={styles.content}>
         <Text variant="heading" style={styles.title}>
           {t('settings.title')}
@@ -30,11 +30,11 @@ export const SettingsScreen: React.FC = () => {
         <Spacer size="lg" />
 
         {/* Language Section */}
-        <Card variant="elevated" padding="lg">
+        <Card variant="elevated" padding="lg" style={styles.card}>
           <Text variant="subheading" style={styles.sectionTitle}>
             {t('settings.language')}
           </Text>
-          <Text color="textSecondary" style={styles.sectionDescription}>
+          <Text style={styles.sectionDescription}>
             {t('settings.languageDescription')}
           </Text>
           <Spacer size="md" />
@@ -44,14 +44,18 @@ export const SettingsScreen: React.FC = () => {
               onPress={() => setLanguage('fr')}
               style={styles.optionButton}
             >
-              Français
+              <Text style={language === 'fr' ? undefined : styles.ghostButtonText}>
+                Français
+              </Text>
             </Button>
             <Button
               variant={language === 'en' ? 'primary' : 'ghost'}
               onPress={() => setLanguage('en')}
               style={styles.optionButton}
             >
-              English
+              <Text style={language === 'en' ? undefined : styles.ghostButtonText}>
+                English
+              </Text>
             </Button>
           </View>
         </Card>
@@ -59,11 +63,11 @@ export const SettingsScreen: React.FC = () => {
         <Spacer size="md" />
 
         {/* Theme Section */}
-        <Card variant="elevated" padding="lg">
+        <Card variant="elevated" padding="lg" style={styles.card}>
           <Text variant="subheading" style={styles.sectionTitle}>
             {t('settings.theme')}
           </Text>
-          <Text color="textSecondary" style={styles.sectionDescription}>
+          <Text style={styles.sectionDescription}>
             {t('settings.themeDescription')}
           </Text>
           <Spacer size="md" />
@@ -75,7 +79,9 @@ export const SettingsScreen: React.FC = () => {
                 onPress={() => setTheme(themeName)}
                 style={styles.optionButton}
               >
-                {themeName}
+                <Text style={currentTheme === themeName ? undefined : styles.ghostButtonText}>
+                  {themeName}
+                </Text>
               </Button>
             ))}
           </View>
@@ -84,7 +90,7 @@ export const SettingsScreen: React.FC = () => {
         <Spacer size="md" />
 
         {/* Animations Section */}
-        <Card variant="elevated" padding="lg">
+        <Card variant="elevated" padding="lg" style={styles.card}>
           <View style={styles.switchRow}>
             <View style={styles.switchLabel}>
               <Text variant="subheading" style={styles.sectionTitle}>
@@ -113,13 +119,16 @@ const styles = StyleSheet.create({
   },
   title: {
     marginTop: 8,
+    color: '#1A1A1A', // ✅ Texte foncé
   },
   sectionTitle: {
     marginBottom: 4,
+    color: '#1A1A1A', // ✅ Texte foncé
   },
   sectionDescription: {
     fontSize: 14,
     marginBottom: 8,
+    color: '#666666', // ✅ Gris foncé pour la description
   },
   optionsRow: {
     flexDirection: 'row',
@@ -137,6 +146,12 @@ const styles = StyleSheet.create({
   },
   switchLabel: {
     flex: 1,
+  },
+  card: {
+    backgroundColor: '#FFFFFF', // ✅ Fond blanc fixe pour les cards
+  },
+  ghostButtonText: {
+    color: '#1A1A1A', // ✅ Texte sombre pour les boutons ghost
   },
 });
 

@@ -8,10 +8,11 @@ import {
   Image,
 } from 'react-native';
 import { Video, ResizeMode, AVPlaybackStatus } from 'expo-av';
+import { LinearGradient } from 'expo-linear-gradient';
+import { BlurView } from 'expo-blur';
 import { useNavigation } from '@react-navigation/native';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { useTranslation } from 'react-i18next';
-import { useTheme } from '../design-system/ThemeProvider';
 import { Button, Text, Screen } from '../components/ui';
 import { Spacer } from '../components/ui/Spacer';
 import { supabase, isSupabaseReady } from '../lib/supabase';
@@ -28,7 +29,7 @@ if (Platform.OS !== 'web') {
 type NavigationProp = NativeStackNavigationProp<RootStackParamList>;
 
 export const LoginScreen: React.FC = () => {
-  const { theme } = useTheme();
+  // Don't use theme on login screen - keep it neutral with fixed colors
   const { t } = useTranslation();
   const navigation = useNavigation<NavigationProp>();
   const video = useRef<Video>(null);
@@ -63,6 +64,7 @@ export const LoginScreen: React.FC = () => {
 
       if (error) throw error;
 
+      
       // On web, the redirect happens automatically
       // On mobile, open the OAuth URL in browser
       if (Platform.OS !== 'web' && data.url) {
@@ -145,7 +147,7 @@ export const LoginScreen: React.FC = () => {
   };
 
   return (
-    <Screen style={styles.container}>
+    <Screen style={styles.container} noThemeBackground={true}>
       {/* Video Background */}
       <Video
         ref={video}
@@ -162,32 +164,38 @@ export const LoginScreen: React.FC = () => {
         }}
       />
 
-      {/* Gradient overlay - darker at top and bottom, lighter in middle */}
-      <View style={styles.gradientOverlay} />
+      {/* Dark gradient overlay for better text contrast */}
+      <LinearGradient
+        colors={['rgba(0, 0, 0, 0.7)', 'rgba(0, 0, 0, 0.4)', 'rgba(0, 0, 0, 0.6)', 'rgba(0, 0, 0, 0.8)']}
+        locations={[0, 0.3, 0.7, 1]}
+        style={StyleSheet.absoluteFill}
+      />
 
       {/* Content */}
       <View style={styles.content}>
-        {/* Header - Top of screen with semi-transparent background */}
+        {/* Header - Top of screen with glassmorphism card */}
         <View style={styles.header}>
-          <View style={styles.headerTextContainer}>
-            <Text
-              variant="display"
-              weight="bold"
-              color="textInverse"
-              style={styles.title}
-            >
-              {t('auth.welcome')}
-            </Text>
-            <Spacer size="xs" />
-            <Text variant="subheading" color="textInverse" style={styles.subtitle}>
-              {t('auth.subtitle')}
-            </Text>
-          </View>
+          <BlurView intensity={20} tint="dark" style={styles.headerBlur}>
+            <View style={styles.headerTextContainer}>
+              <Text
+                variant="display"
+                weight="bold"
+                style={styles.title}
+              >
+                {t('auth.welcome')}
+              </Text>
+              <Spacer size="xs" />
+              <Text variant="subheading" style={styles.subtitle}>
+                {t('auth.subtitle')}
+              </Text>
+            </View>
+          </BlurView>
         </View>
 
-        {/* Buttons - Bottom of screen with elegant card */}
+        {/* Buttons - Bottom of screen with elegant glassmorphism card */}
         <View style={styles.buttonsWrapper}>
-          <View style={styles.buttonsCard}>
+          <BlurView intensity={30} tint="dark" style={styles.buttonsBlur}>
+            <View style={styles.buttonsCard}>
             {/* Social buttons row */}
             <View style={styles.socialButtonsRow}>
               {/* Google Sign In */}
@@ -236,7 +244,7 @@ export const LoginScreen: React.FC = () => {
               style={styles.emailButton}
             >
               <View style={styles.buttonContent}>
-                <Text variant="body" weight="medium" color="textInverse">
+                <Text variant="body" weight="medium" style={{ color: '#FFFFFF' }}>
                   ✉️ {t('auth.signInWithEmail')}
                 </Text>
               </View>
@@ -252,11 +260,12 @@ export const LoginScreen: React.FC = () => {
               disabled={loading !== null}
               style={styles.signUpButton}
             >
-              <Text variant="body" weight="medium" color="textInverse">
+              <Text variant="body" weight="medium" style={{ color: '#FFFFFF' }}>
                 {t('auth.signUp')}
               </Text>
             </Button>
-          </View>
+            </View>
+          </BlurView>
         </View>
       </View>
     </Screen>
@@ -274,14 +283,6 @@ const styles = StyleSheet.create({
     width: SCREEN_WIDTH,
     height: SCREEN_HEIGHT,
   },
-  gradientOverlay: {
-    ...StyleSheet.absoluteFillObject,
-    backgroundColor: 'transparent',
-    // Simulating gradient with opacity layers
-    // Dark at top (20% opacity)
-    // Lighter in middle (visible faces)
-    // Dark at bottom (40% opacity for button area)
-  },
   content: {
     flex: 1,
     justifyContent: 'space-between',
@@ -291,23 +292,29 @@ const styles = StyleSheet.create({
     paddingHorizontal: 24,
     alignItems: 'center',
   },
+  headerBlur: {
+    borderRadius: 24,
+    overflow: 'hidden',
+    borderWidth: 1,
+    borderColor: 'rgba(255, 255, 255, 0.15)',
+  },
   headerTextContainer: {
-    backgroundColor: 'rgba(0, 0, 0, 0.3)',
-    paddingVertical: 20,
-    paddingHorizontal: 24,
-    borderRadius: 16,
+    paddingVertical: 24,
+    paddingHorizontal: 32,
     alignItems: 'center',
-    backdropFilter: 'blur(10px)',
+    backgroundColor: 'rgba(0, 0, 0, 0.2)',
   },
   title: {
     textAlign: 'center',
-    textShadowColor: 'rgba(0, 0, 0, 0.9)',
+    color: '#FFFFFF',
+    textShadowColor: 'rgba(0, 0, 0, 0.5)',
     textShadowOffset: { width: 0, height: 2 },
-    textShadowRadius: 6,
+    textShadowRadius: 8,
   },
   subtitle: {
     textAlign: 'center',
-    textShadowColor: 'rgba(0, 0, 0, 0.8)',
+    color: 'rgba(255, 255, 255, 0.9)',
+    textShadowColor: 'rgba(0, 0, 0, 0.4)',
     textShadowOffset: { width: 0, height: 1 },
     textShadowRadius: 4,
   },
@@ -315,13 +322,15 @@ const styles = StyleSheet.create({
     paddingHorizontal: 24,
     paddingBottom: 40,
   },
-  buttonsCard: {
-    backgroundColor: 'rgba(0, 0, 0, 0.5)',
-    borderRadius: 24,
-    padding: 20,
-    backdropFilter: 'blur(20px)',
+  buttonsBlur: {
+    borderRadius: 28,
+    overflow: 'hidden',
     borderWidth: 1,
-    borderColor: 'rgba(255, 255, 255, 0.1)',
+    borderColor: 'rgba(255, 255, 255, 0.2)',
+  },
+  buttonsCard: {
+    padding: 24,
+    backgroundColor: 'rgba(0, 0, 0, 0.3)',
   },
   socialButtonsRow: {
     flexDirection: 'row',
@@ -329,16 +338,16 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   socialButton: {
-    width: 80,
-    height: 80,
-    borderRadius: 20,
-    backgroundColor: 'rgba(255, 255, 255, 0.95)',
+    width: 72,
+    height: 72,
+    borderRadius: 18,
+    backgroundColor: '#FFFFFF',
     alignItems: 'center',
     justifyContent: 'center',
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.3,
-    shadowRadius: 8,
+    shadowOpacity: 0.25,
+    shadowRadius: 12,
     elevation: 8,
   },
   socialLogo: {
@@ -348,10 +357,10 @@ const styles = StyleSheet.create({
   emailButton: {
     width: '100%',
     minHeight: 56,
-    backgroundColor: 'rgba(255, 255, 255, 0.15)',
+    backgroundColor: 'rgba(255, 255, 255, 0.25)',
     borderRadius: 16,
     borderWidth: 1,
-    borderColor: 'rgba(255, 255, 255, 0.2)',
+    borderColor: 'rgba(255, 255, 255, 0.35)',
   },
   buttonContent: {
     flexDirection: 'row',
@@ -364,6 +373,6 @@ const styles = StyleSheet.create({
     backgroundColor: 'transparent',
     borderRadius: 16,
     borderWidth: 1.5,
-    borderColor: 'rgba(255, 255, 255, 0.4)',
+    borderColor: 'rgba(255, 255, 255, 0.5)',
   },
 });

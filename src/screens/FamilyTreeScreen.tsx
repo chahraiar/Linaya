@@ -580,7 +580,7 @@ export const FamilyTreeScreen: React.FC = () => {
           {profile && (
             <>
               <Spacer size="xs" horizontal />
-              <Text variant="body" color="textSecondary">
+              <Text variant="body" style={styles.headerSubtitle}>
                 • {profile.display_name || 'Utilisateur'}
               </Text>
             </>
@@ -811,6 +811,10 @@ const styles = StyleSheet.create({
   headerTitle: {
     fontSize: 24,
     fontWeight: '700',
+  },
+  headerSubtitle: {
+    fontSize: 16,
+    color: '#666666', // ✅ Gris foncé pour la visibilité
   },
   canvasContainer: {
     flex: 1,

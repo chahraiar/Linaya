@@ -8,12 +8,14 @@ export interface ScreenProps extends ViewProps {
   children: React.ReactNode;
   safeArea?: boolean;
   gradient?: boolean;
+  noThemeBackground?: boolean; // If true, don't apply theme background
 }
 
 export const Screen: React.FC<ScreenProps> = ({
   children,
   safeArea = true,
   gradient = true,
+  noThemeBackground = false,
   style,
   ...props
 }) => {
@@ -22,7 +24,11 @@ export const Screen: React.FC<ScreenProps> = ({
 
   // For Aurora theme, use gradient background
   // For others, use solid color
+  // If noThemeBackground is true, don't apply any background
   const getBackgroundColor = () => {
+    if (noThemeBackground) {
+      return 'transparent';
+    }
     if (theme.name === 'Aurora' && gradient) {
       return undefined; // Will use LinearGradient
     }
@@ -47,7 +53,8 @@ export const Screen: React.FC<ScreenProps> = ({
   );
 
   // For family tree screen, use light warm background
-  if (theme.name === 'Aurora' && gradient) {
+  // But skip if noThemeBackground is true
+  if (theme.name === 'Aurora' && gradient && !noThemeBackground) {
     return (
       <LinearGradient
         colors={['#FAF9F6', '#F5F3F0']} // Off-white to light beige

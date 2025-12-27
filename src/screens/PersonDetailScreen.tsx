@@ -1,22 +1,30 @@
-import React, { useState, useEffect } from 'react';
-import { View, StyleSheet, ScrollView, Image, TouchableOpacity, Linking, Pressable, Alert, TextInput, ActivityIndicator } from 'react-native';
+import React, { useState } from 'react';
+import {
+  View,
+  StyleSheet,
+  ScrollView,
+  Image,
+  TouchableOpacity,
+  Pressable,
+  Alert,
+  ActivityIndicator,
+} from 'react-native';
 import { useRoute, useNavigation, RouteProp } from '@react-navigation/native';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { useTranslation } from 'react-i18next';
 import * as ImagePicker from 'expo-image-picker';
 import { useTheme } from '../design-system/ThemeProvider';
-import { Screen, Text, Button, IconButton, Card, Spacer, Input } from '../components/ui';
+import { Screen, Text, Button, Card, Spacer, Input } from '../components/ui'; // ✅ IconButton retiré
 import { useFamilyTreeStore } from '../store/familyTreeStore';
 import { usePersonDetailStore } from '../store/personDetailStore';
 import { RootStackParamList } from '../navigation/navigation';
-import { 
-  updatePerson, 
-  getPersonContacts, 
-  upsertPersonContact, 
-  deletePersonContact,
+import {
+  updatePerson,
+  getPersonContacts,
+  upsertPersonContact,
   uploadPersonPhoto,
   getPersonPhotoUrl,
-  ContactDB 
+  ContactDB,
 } from '../services/treeService';
 
 type PersonDetailRouteProp = RouteProp<RootStackParamList, 'PersonDetail'>;
@@ -30,30 +38,33 @@ export const PersonDetailScreen: React.FC = () => {
   const navigation = useNavigation<NavigationProp>();
   const route = useRoute<PersonDetailRouteProp>();
   const { personId } = route.params;
-  
-  console.log('📱 PersonDetailScreen mounted with personId:', personId);
-  
+
   const { getPerson, updatePerson: updatePersonInStore } = useFamilyTreeStore();
   const { getPersonDetails } = usePersonDetailStore();
+
   const [activeTab, setActiveTab] = useState<TabType>('data');
   const [isEditing, setIsEditing] = useState(false);
   const [isEditingData, setIsEditingData] = useState(false);
+
   const [editedFirstName, setEditedFirstName] = useState('');
   const [editedLastName, setEditedLastName] = useState('');
   const [editedBirthDate, setEditedBirthDate] = useState('');
   const [editedDeathDate, setEditedDeathDate] = useState('');
   const [editedGender, setEditedGender] = useState<string>('');
   const [editedNotes, setEditedNotes] = useState('');
+
   const [editedEmail, setEditedEmail] = useState('');
   const [editedPhone, setEditedPhone] = useState('');
   const [editedMobile, setEditedMobile] = useState('');
   const [editedAddress, setEditedAddress] = useState('');
+
   const [contacts, setContacts] = useState<ContactDB[]>([]);
   const [isSaving, setIsSaving] = useState(false);
   const [isLoadingContacts, setIsLoadingContacts] = useState(false);
+
   const [photoUrl, setPhotoUrl] = useState<string | null>(null);
   const [isUploadingPhoto, setIsUploadingPhoto] = useState(false);
-  
+
   const person = personId ? getPerson(personId) : null;
   const details = personId ? getPersonDetails(personId) : null;
 
@@ -63,6 +74,7 @@ export const PersonDetailScreen: React.FC = () => {
       loadContacts();
       loadPhoto();
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [personId]);
 
   // Load person photo
@@ -82,13 +94,17 @@ export const PersonDetailScreen: React.FC = () => {
     try {
       const loadedContacts = await getPersonContacts(personId);
       setContacts(loadedContacts);
-      
+
       // Extract contact values for editing
-      const emailContact = loadedContacts.find(c => c.type === 'email' && c.is_primary);
-      const phoneContact = loadedContacts.find(c => c.type === 'other' && c.label?.toLowerCase().includes('phone'));
-      const mobileContact = loadedContacts.find(c => c.type === 'mobile' && c.is_primary);
-      const addressContact = loadedContacts.find(c => c.type === 'other' && c.label?.toLowerCase().includes('address'));
-      
+      const emailContact = loadedContacts.find((c) => c.type === 'email' && c.is_primary);
+      const phoneContact = loadedContacts.find(
+        (c) => c.type === 'other' && c.label?.toLowerCase().includes('phone')
+      );
+      const mobileContact = loadedContacts.find((c) => c.type === 'mobile' && c.is_primary);
+      const addressContact = loadedContacts.find(
+        (c) => c.type === 'other' && c.label?.toLowerCase().includes('address')
+      );
+
       if (emailContact) setEditedEmail(emailContact.value);
       if (phoneContact) setEditedPhone(phoneContact.value);
       if (mobileContact) setEditedMobile(mobileContact.value);
@@ -121,9 +137,7 @@ export const PersonDetailScreen: React.FC = () => {
       setEditedNotes('');
     }
   }, [person, isEditingData]);
-  
-  console.log('📱 PersonDetailScreen - person:', person ? `${person.firstName} ${person.lastName}` : 'null');
-  
+
   if (!person) {
     return (
       <Screen>
@@ -135,30 +149,25 @@ export const PersonDetailScreen: React.FC = () => {
       </Screen>
     );
   }
-  
+
   const fullName = `${person.firstName} ${person.lastName}`.trim() || 'Sans nom';
-  const birthDate = person.birthYear ? new Date(person.birthYear, 0, 1).toLocaleDateString('fr-FR', { year: 'numeric' }) : null;
 
   const handleSave = async () => {
-    if (!person || !personId) return;
+    if (!personId) return;
 
     setIsSaving(true);
     try {
-      const birthDateStr = editedBirthDate || null;
-      const deathDateStr = editedDeathDate || null;
-
       const updatedPerson = await updatePerson(personId, {
         firstName: editedFirstName.trim() || undefined,
         lastName: editedLastName.trim() || undefined,
         displayName: `${editedFirstName.trim()} ${editedLastName.trim()}`.trim() || undefined,
-        birthDate: birthDateStr,
-        deathDate: deathDateStr,
+        birthDate: editedBirthDate || null,
+        deathDate: editedDeathDate || null,
         gender: editedGender || undefined,
         notes: editedNotes || undefined,
       });
 
       if (updatedPerson) {
-        // Update in store
         updatePersonInStore(personId, {
           firstName: updatedPerson.firstName,
           lastName: updatedPerson.lastName,
@@ -180,20 +189,16 @@ export const PersonDetailScreen: React.FC = () => {
   };
 
   const handleSaveData = async () => {
-    if (!person || !personId) return;
+    if (!personId) return;
 
     setIsSaving(true);
     try {
-      // Save person basic info
-      const birthDateStr = editedBirthDate || null;
-      const deathDateStr = editedDeathDate || null;
-
       const updatedPerson = await updatePerson(personId, {
         firstName: editedFirstName.trim() || undefined,
         lastName: editedLastName.trim() || undefined,
         displayName: `${editedFirstName.trim()} ${editedLastName.trim()}`.trim() || undefined,
-        birthDate: birthDateStr,
-        deathDate: deathDateStr,
+        birthDate: editedBirthDate || null,
+        deathDate: editedDeathDate || null,
         gender: editedGender || undefined,
         notes: editedNotes || undefined,
       });
@@ -221,7 +226,6 @@ export const PersonDetailScreen: React.FC = () => {
         await upsertPersonContact(personId, 'other', editedAddress.trim(), 'Adresse', false);
       }
 
-      // Reload contacts
       await loadContacts();
 
       setIsEditingData(false);
@@ -236,17 +240,16 @@ export const PersonDetailScreen: React.FC = () => {
 
   const handlePickImage = async () => {
     try {
-      // Request permissions
       const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
       if (status !== 'granted') {
         Alert.alert(
           t('common.error'),
-          t('person.photoPermissionDenied') || 'Permission to access camera roll is required!'
+          t('person.photoPermissionDenied') ||
+            'Permission to access camera roll is required!'
         );
         return;
       }
 
-      // Launch image picker
       const result = await ImagePicker.launchImageLibraryAsync({
         mediaTypes: ['images'],
         allowsEditing: true,
@@ -265,7 +268,6 @@ export const PersonDetailScreen: React.FC = () => {
 
   const handleTakePhoto = async () => {
     try {
-      // Request permissions
       const { status } = await ImagePicker.requestCameraPermissionsAsync();
       if (status !== 'granted') {
         Alert.alert(
@@ -275,7 +277,6 @@ export const PersonDetailScreen: React.FC = () => {
         return;
       }
 
-      // Launch camera
       const result = await ImagePicker.launchCameraAsync({
         mediaTypes: ['images'],
         allowsEditing: true,
@@ -301,8 +302,6 @@ export const PersonDetailScreen: React.FC = () => {
       if (url) {
         setPhotoUrl(url);
         Alert.alert(t('common.success'), t('person.photoUploaded') || 'Photo uploaded successfully');
-        // Reload person data to get updated main_photo_id
-        // You might want to refresh the person from store here
       } else {
         Alert.alert(t('common.error'), t('person.photoUploadError') || 'Error uploading photo');
       }
@@ -315,44 +314,41 @@ export const PersonDetailScreen: React.FC = () => {
   };
 
   const showPhotoOptions = () => {
-    Alert.alert(
-      t('person.changePhoto') || 'Change Photo',
-      '',
-      [
-        {
-          text: t('person.takePhoto') || 'Take Photo',
-          onPress: handleTakePhoto,
-        },
-        {
-          text: t('person.chooseFromLibrary') || 'Choose from Library',
-          onPress: handlePickImage,
-        },
-        {
-          text: t('common.cancel') || 'Cancel',
-          style: 'cancel',
-        },
-      ]
-    );
+    Alert.alert(t('person.changePhoto') || 'Change Photo', '', [
+      { text: t('person.takePhoto') || 'Take Photo', onPress: handleTakePhoto },
+      { text: t('person.chooseFromLibrary') || 'Choose from Library', onPress: handlePickImage },
+      { text: t('common.cancel') || 'Cancel', style: 'cancel' },
+    ]);
   };
-  
+
   return (
-    <Screen gradient={false} style={{ backgroundColor: '#FAF9F6' }}>
+    <Screen gradient={false} style={{ backgroundColor: '#F5F5F0' }}>
       {/* Header */}
-      <View style={[styles.header, { backgroundColor: theme.colors.surface }]}>
-        <IconButton variant="default" onPress={() => navigation.goBack()}>
-          <Text>←</Text>
-        </IconButton>
+      <View style={styles.header}>
+        <Pressable
+          onPress={() => navigation.goBack()}
+          style={styles.headerIconBtn}
+          hitSlop={8}
+        >
+          <Text style={styles.headerIconText}>←</Text>
+        </Pressable>
+
         <Text variant="heading" style={styles.headerTitle}>
           {t('person.profile')}
         </Text>
-        <IconButton variant="default" onPress={() => setIsEditing(!isEditing)}>
-          <Text>{isEditing ? '✕' : '✏️'}</Text>
-        </IconButton>
+
+        <Pressable
+          onPress={() => setIsEditing(!isEditing)}
+          style={styles.headerIconBtn}
+          hitSlop={8}
+        >
+          <Text style={styles.headerIconText}>{isEditing ? '✕' : '✏️'}</Text>
+        </Pressable>
       </View>
-      
+
       <ScrollView style={styles.scrollView} showsVerticalScrollIndicator={false}>
         {/* Profile Header */}
-        <View style={[styles.profileHeader, { backgroundColor: theme.colors.surface }]}>
+        <View style={styles.profileHeader}>
           <View style={styles.avatarContainer}>
             {photoUrl ? (
               <Image source={{ uri: photoUrl }} style={styles.avatarImage} />
@@ -361,10 +357,12 @@ export const PersonDetailScreen: React.FC = () => {
                 <Text style={styles.avatarText}>👤</Text>
               </View>
             )}
-            <TouchableOpacity 
+
+            <TouchableOpacity
               style={styles.cameraButton}
               onPress={showPhotoOptions}
               disabled={isUploadingPhoto}
+              activeOpacity={0.7}
             >
               {isUploadingPhoto ? (
                 <ActivityIndicator size="small" color={theme.colors.primary} />
@@ -373,7 +371,7 @@ export const PersonDetailScreen: React.FC = () => {
               )}
             </TouchableOpacity>
           </View>
-          
+
           {isEditing ? (
             <>
               <Input
@@ -431,21 +429,22 @@ export const PersonDetailScreen: React.FC = () => {
             </>
           ) : (
             <>
-              <Text variant="heading" style={[styles.name, { color: theme.colors.text }]}>
+              <Text variant="heading" style={styles.name}>
                 {fullName}
               </Text>
-              
+
               {person.birthYear && (
-                <Text style={[styles.birthInfo, { color: theme.colors.textSecondary }]}>
-                  {t('person.born')} : {person.birthYear} {person.deathYear ? `• ${t('person.died')} : ${person.deathYear}` : ''}
+                <Text style={styles.birthInfo}>
+                  {t('person.born')} : {person.birthYear}{' '}
+                  {person.deathYear ? `• ${t('person.died')} : ${person.deathYear}` : ''}
                 </Text>
               )}
             </>
           )}
         </View>
-        
+
         {/* Tabs */}
-        <View style={[styles.tabsContainer, { backgroundColor: theme.colors.surface }]}>
+        <View style={styles.tabsContainer}>
           <Pressable
             style={[styles.tab, activeTab === 'data' && styles.tabActive]}
             onPress={() => setActiveTab('data')}
@@ -453,14 +452,17 @@ export const PersonDetailScreen: React.FC = () => {
             <Text
               style={[
                 styles.tabText,
-                activeTab === 'data' && { color: theme.colors.primary, fontWeight: '600' },
+                { color: activeTab === 'data' ? theme.colors.primary || '#1976D2' : '#666666' },
+                activeTab === 'data' && { fontWeight: '600' },
               ]}
             >
               {t('person.data')}
             </Text>
-            {activeTab === 'data' && <View style={[styles.tabIndicator, { backgroundColor: theme.colors.primary }]} />}
+            {activeTab === 'data' && (
+              <View style={[styles.tabIndicator, { backgroundColor: theme.colors.primary }]} />
+            )}
           </Pressable>
-          
+
           <Pressable
             style={[styles.tab, activeTab === 'events' && styles.tabActive]}
             onPress={() => setActiveTab('events')}
@@ -468,14 +470,17 @@ export const PersonDetailScreen: React.FC = () => {
             <Text
               style={[
                 styles.tabText,
-                activeTab === 'events' && { color: theme.colors.primary, fontWeight: '600' },
+                { color: activeTab === 'events' ? theme.colors.primary || '#1976D2' : '#666666' },
+                activeTab === 'events' && { fontWeight: '600' },
               ]}
             >
               {t('person.events')}
             </Text>
-            {activeTab === 'events' && <View style={[styles.tabIndicator, { backgroundColor: theme.colors.primary }]} />}
+            {activeTab === 'events' && (
+              <View style={[styles.tabIndicator, { backgroundColor: theme.colors.primary }]} />
+            )}
           </Pressable>
-          
+
           <Pressable
             style={[styles.tab, activeTab === 'media' && styles.tabActive]}
             onPress={() => setActiveTab('media')}
@@ -483,14 +488,17 @@ export const PersonDetailScreen: React.FC = () => {
             <Text
               style={[
                 styles.tabText,
-                activeTab === 'media' && { color: theme.colors.primary, fontWeight: '600' },
+                { color: activeTab === 'media' ? theme.colors.primary || '#1976D2' : '#666666' },
+                activeTab === 'media' && { fontWeight: '600' },
               ]}
             >
               {t('person.media')}
             </Text>
-            {activeTab === 'media' && <View style={[styles.tabIndicator, { backgroundColor: theme.colors.primary }]} />}
+            {activeTab === 'media' && (
+              <View style={[styles.tabIndicator, { backgroundColor: theme.colors.primary }]} />
+            )}
           </Pressable>
-          
+
           <Pressable
             style={[styles.tab, activeTab === 'relatives' && styles.tabActive]}
             onPress={() => setActiveTab('relatives')}
@@ -498,20 +506,25 @@ export const PersonDetailScreen: React.FC = () => {
             <Text
               style={[
                 styles.tabText,
-                activeTab === 'relatives' && { color: theme.colors.primary, fontWeight: '600' },
+                {
+                  color: activeTab === 'relatives' ? theme.colors.primary || '#1976D2' : '#666666',
+                },
+                activeTab === 'relatives' && { fontWeight: '600' },
               ]}
             >
               {t('person.relatives')}
             </Text>
-            {activeTab === 'relatives' && <View style={[styles.tabIndicator, { backgroundColor: theme.colors.primary }]} />}
+            {activeTab === 'relatives' && (
+              <View style={[styles.tabIndicator, { backgroundColor: theme.colors.primary }]} />
+            )}
           </Pressable>
         </View>
-        
+
         {/* Tab Content */}
         <View style={styles.tabContent}>
           {activeTab === 'data' && (
-            <DataTab 
-              person={person} 
+            <DataTab
+              person={person}
               details={details}
               contacts={contacts}
               isLoadingContacts={isLoadingContacts}
@@ -584,7 +597,6 @@ interface DataTabProps {
 
 const DataTab: React.FC<DataTabProps> = ({
   person,
-  details,
   contacts,
   isLoadingContacts,
   isEditing,
@@ -616,22 +628,24 @@ const DataTab: React.FC<DataTabProps> = ({
   const { theme } = useTheme();
 
   // Get contact values from database
-  const emailContact = contacts.find(c => c.type === 'email' && c.is_primary);
-  const phoneContact = contacts.find(c => c.type === 'other' && c.label?.toLowerCase().includes('téléphone'));
-  const mobileContact = contacts.find(c => c.type === 'mobile' && c.is_primary);
-  const addressContact = contacts.find(c => c.type === 'other' && c.label?.toLowerCase().includes('adresse'));
+  const emailContact = contacts.find((c) => c.type === 'email' && c.is_primary);
+  const phoneContact = contacts.find(
+    (c) => c.type === 'other' && c.label?.toLowerCase().includes('téléphone')
+  );
+  const mobileContact = contacts.find((c) => c.type === 'mobile' && c.is_primary);
+  const addressContact = contacts.find(
+    (c) => c.type === 'other' && c.label?.toLowerCase().includes('adresse')
+  );
 
-  const displayEmail = isEditing ? editedEmail : (emailContact?.value || '');
-  const displayPhone = isEditing ? editedPhone : (phoneContact?.value || '');
-  const displayMobile = isEditing ? editedMobile : (mobileContact?.value || '');
-  const displayAddress = isEditing ? editedAddress : (addressContact?.value || '');
+  const displayEmail = isEditing ? editedEmail : emailContact?.value || '';
+  const displayPhone = isEditing ? editedPhone : phoneContact?.value || '';
+  const displayMobile = isEditing ? editedMobile : mobileContact?.value || '';
+  const displayAddress = isEditing ? editedAddress : addressContact?.value || '';
 
   if (isLoadingContacts && !isEditing) {
     return (
       <View style={styles.emptyState}>
-        <Text style={{ color: theme.colors.textSecondary }}>
-          {t('common.loading')}
-        </Text>
+        <Text style={styles.emptyField}>{t('common.loading')}</Text>
       </View>
     );
   }
@@ -642,7 +656,7 @@ const DataTab: React.FC<DataTabProps> = ({
         {/* Basic Information */}
         <Card variant="elevated" padding="md" style={styles.sectionCard}>
           <View style={styles.sectionHeader}>
-            <Text variant="heading" style={[styles.sectionTitle, { color: theme.colors.text }]}>
+            <Text variant="heading" style={styles.sectionTitle}>
               {t('person.profile') || 'Informations personnelles'}
             </Text>
             {!isEditing && (
@@ -652,7 +666,7 @@ const DataTab: React.FC<DataTabProps> = ({
             )}
           </View>
           <Spacer size="sm" />
-          
+
           {isEditing ? (
             <>
               <Input
@@ -696,7 +710,15 @@ const DataTab: React.FC<DataTabProps> = ({
                       onPress={() => setEditedGender(gender)}
                       style={styles.genderButton}
                     >
-                      <Text>{gender === 'male' ? '👨' : gender === 'female' ? '👩' : gender === 'other' ? '⚧️' : '❓'}</Text>
+                      <Text>
+                        {gender === 'male'
+                          ? '👨'
+                          : gender === 'female'
+                          ? '👩'
+                          : gender === 'other'
+                          ? '⚧️'
+                          : '❓'}
+                      </Text>
                     </Button>
                   ))}
                 </View>
@@ -737,30 +759,22 @@ const DataTab: React.FC<DataTabProps> = ({
             <>
               <View style={styles.infoRow}>
                 <Text style={styles.infoLabel}>{t('person.firstName')}</Text>
-                <Text style={[styles.infoValue, { color: theme.colors.text }]}>
-                  {person.firstName || '-'}
-                </Text>
+                <Text style={styles.infoValue}>{person.firstName || '-'}</Text>
               </View>
               <View style={styles.infoRow}>
                 <Text style={styles.infoLabel}>{t('person.lastName')}</Text>
-                <Text style={[styles.infoValue, { color: theme.colors.text }]}>
-                  {person.lastName || '-'}
-                </Text>
+                <Text style={styles.infoValue}>{person.lastName || '-'}</Text>
               </View>
               {person.birthYear && (
                 <View style={styles.infoRow}>
                   <Text style={styles.infoLabel}>{t('person.birth')}</Text>
-                  <Text style={[styles.infoValue, { color: theme.colors.text }]}>
-                    {person.birthYear}
-                  </Text>
+                  <Text style={styles.infoValue}>{person.birthYear}</Text>
                 </View>
               )}
               {person.deathYear && (
                 <View style={styles.infoRow}>
                   <Text style={styles.infoLabel}>{t('person.death')}</Text>
-                  <Text style={[styles.infoValue, { color: theme.colors.text }]}>
-                    {person.deathYear}
-                  </Text>
+                  <Text style={styles.infoValue}>{person.deathYear}</Text>
                 </View>
               )}
             </>
@@ -771,11 +785,11 @@ const DataTab: React.FC<DataTabProps> = ({
 
         {/* Contact Information */}
         <Card variant="elevated" padding="md" style={styles.sectionCard}>
-          <Text variant="heading" style={[styles.sectionTitle, { color: theme.colors.text }]}>
+          <Text variant="heading" style={styles.sectionTitle}>
             {t('person.contact')}
           </Text>
           <Spacer size="sm" />
-          
+
           {isEditing ? (
             <>
               <Input
@@ -815,41 +829,33 @@ const DataTab: React.FC<DataTabProps> = ({
               {displayEmail ? (
                 <View style={styles.contactRow}>
                   <Text style={styles.contactLabel}>📧 {t('person.email')}</Text>
-                  <Text style={[styles.contactValue, { color: theme.colors.primary }]}>
-                    {displayEmail}
-                  </Text>
+                  <Text style={styles.contactValue}>{displayEmail}</Text>
                 </View>
               ) : null}
-              
+
               {displayPhone ? (
                 <View style={styles.contactRow}>
                   <Text style={styles.contactLabel}>📞 {t('person.phone')}</Text>
-                  <Text style={[styles.contactValue, { color: theme.colors.text }]}>
-                    {displayPhone}
-                  </Text>
+                  <Text style={styles.contactValue}>{displayPhone}</Text>
                 </View>
               ) : null}
-              
+
               {displayMobile ? (
                 <View style={styles.contactRow}>
                   <Text style={styles.contactLabel}>📱 {t('person.mobile')}</Text>
-                  <Text style={[styles.contactValue, { color: theme.colors.text }]}>
-                    {displayMobile}
-                  </Text>
+                  <Text style={styles.contactValue}>{displayMobile}</Text>
                 </View>
               ) : null}
-              
+
               {displayAddress ? (
                 <View style={styles.contactRow}>
                   <Text style={styles.contactLabel}>📍 {t('person.address')}</Text>
-                  <Text style={[styles.contactValue, { color: theme.colors.text }]}>
-                    {displayAddress}
-                  </Text>
+                  <Text style={styles.contactValue}>{displayAddress}</Text>
                 </View>
               ) : null}
-              
+
               {!displayEmail && !displayPhone && !displayMobile && !displayAddress && (
-                <Text style={[styles.emptyField, { color: theme.colors.textSecondary }]}>
+                <Text style={styles.emptyField}>
                   {t('person.noContactInfo') || 'Aucune information de contact'}
                 </Text>
               )}
@@ -862,40 +868,47 @@ const DataTab: React.FC<DataTabProps> = ({
 };
 
 // Events Tab Component
-const EventsTab: React.FC<{ person: any; details: any }> = ({ person, details }) => {
+const EventsTab: React.FC<{ person: any; details: any }> = ({ details }) => {
   const { t } = useTranslation();
-  const { theme } = useTheme();
-  
+
   if (!details || !details.events || details.events.length === 0) {
     return (
       <View style={styles.emptyState}>
-        <Text style={{ color: theme.colors.textSecondary }}>
-          {t('person.noPhotos')}
-        </Text>
+        <Text style={styles.emptyField}>{t('person.noPhotos')}</Text>
       </View>
     );
   }
-  
+
   const getEventIcon = (type: string) => {
     switch (type) {
-      case 'birth': return '🎂';
-      case 'death': return '🕯️';
-      case 'marriage': return '💍';
-      case 'divorce': return '💔';
-      default: return '📅';
+      case 'birth':
+        return '🎂';
+      case 'death':
+        return '🕯️';
+      case 'marriage':
+        return '💍';
+      case 'divorce':
+        return '💔';
+      default:
+        return '📅';
     }
   };
-  
+
   const getEventLabel = (type: string) => {
     switch (type) {
-      case 'birth': return t('person.birth');
-      case 'death': return t('person.death');
-      case 'marriage': return t('person.marriage');
-      case 'divorce': return t('person.divorce');
-      default: return type;
+      case 'birth':
+        return t('person.birth');
+      case 'death':
+        return t('person.death');
+      case 'marriage':
+        return t('person.marriage');
+      case 'divorce':
+        return t('person.divorce');
+      default:
+        return type;
     }
   };
-  
+
   return (
     <View style={styles.tabContentInner}>
       {details.events.map((event: any) => (
@@ -903,26 +916,16 @@ const EventsTab: React.FC<{ person: any; details: any }> = ({ person, details })
           <View style={styles.eventHeader}>
             <Text style={styles.eventIcon}>{getEventIcon(event.type)}</Text>
             <View style={styles.eventInfo}>
-              <Text style={[styles.eventType, { color: theme.colors.text }]}>
-                {getEventLabel(event.type)}
-              </Text>
-              <Text style={[styles.eventDate, { color: theme.colors.textSecondary }]}>
+              <Text style={styles.eventType}>{getEventLabel(event.type)}</Text>
+              <Text style={styles.eventDate}>
                 {new Date(event.date).toLocaleDateString('fr-FR', {
                   year: 'numeric',
                   month: 'long',
                   day: 'numeric',
                 })}
               </Text>
-              {event.place && (
-                <Text style={[styles.eventPlace, { color: theme.colors.textSecondary }]}>
-                  📍 {event.place}
-                </Text>
-              )}
-              {event.description && (
-                <Text style={[styles.eventDescription, { color: theme.colors.textSecondary }]}>
-                  {event.description}
-                </Text>
-              )}
+              {event.place && <Text style={styles.eventPlace}>📍 {event.place}</Text>}
+              {event.description && <Text style={styles.eventDescription}>{event.description}</Text>}
             </View>
           </View>
         </Card>
@@ -934,19 +937,16 @@ const EventsTab: React.FC<{ person: any; details: any }> = ({ person, details })
 // Media Tab Component
 const MediaTab: React.FC<{ person: any; details: any }> = ({ person, details }) => {
   const { t } = useTranslation();
-  const { theme } = useTheme();
-  
+
   if (!details || !details.media || details.media.length === 0) {
     return (
       <View style={styles.emptyState}>
         <Card variant="elevated" padding="lg" style={styles.emptyMediaCard}>
-          <Text style={[styles.emptyMediaText, { color: theme.colors.text }]}>
+          <Text style={styles.emptyMediaText}>
             {t('person.noPhotos')} {person.firstName} {person.lastName}
           </Text>
           <Spacer size="md" />
-          <Text style={[styles.emptyMediaSubtext, { color: theme.colors.textSecondary }]}>
-            {t('person.addPhotos')}
-          </Text>
+          <Text style={styles.emptyMediaSubtext}>{t('person.addPhotos')}</Text>
           <Spacer size="md" />
           <Button variant="primary" onPress={() => {}}>
             {t('person.addPhotos')}
@@ -955,10 +955,10 @@ const MediaTab: React.FC<{ person: any; details: any }> = ({ person, details }) 
       </View>
     );
   }
-  
+
   return (
     <View style={styles.tabContentInner}>
-      <Text style={[styles.sectionTitle, { color: theme.colors.text }]}>
+      <Text style={styles.sectionTitle}>
         {details.media.length} {t('person.media')}
       </Text>
       {/* Media grid would go here */}
@@ -969,107 +969,89 @@ const MediaTab: React.FC<{ person: any; details: any }> = ({ person, details }) 
 // Relatives Tab Component
 const RelativesTab: React.FC<{ person: any }> = ({ person }) => {
   const { t } = useTranslation();
-  const { theme } = useTheme();
   const navigation = useNavigation<NavigationProp>();
+  const { theme } = useTheme();
   const { getPerson, getAllPersons } = useFamilyTreeStore();
-  
+
   const parents = person.parentIds.map((id: string) => getPerson(id)).filter(Boolean);
   const partner = person.partnerId ? getPerson(person.partnerId) : null;
   const children = person.childrenIds.map((id: string) => getPerson(id)).filter(Boolean);
-  
+
   // Find siblings (persons who share at least one parent)
   const allPersons = getAllPersons();
   const siblings = allPersons.filter((p) => {
     if (p.id === person.id) return false;
-    return p.parentIds.some((parentId) => person.parentIds.includes(parentId));
+    return p.parentIds.some((parentId: string) => person.parentIds.includes(parentId));
   });
-  
+
   const handlePersonPress = (personId: string) => {
     navigation.push('PersonDetail', { personId });
   };
-  
+
   const renderPersonCard = (p: any, relation: string) => (
-    <Pressable
-      key={p.id}
-      onPress={() => handlePersonPress(p.id)}
-    >
-      <Card
-        variant="elevated"
-        padding="md"
-        style={styles.relativeCard}
-      >
-      <View style={styles.relativeCardContent}>
-        <View style={[styles.relativeAvatar, { backgroundColor: theme.colors.primary + '15' }]}>
-          <Text style={styles.relativeAvatarText}>👤</Text>
-        </View>
-        <View style={styles.relativeInfo}>
-          <Text style={[styles.relativeName, { color: theme.colors.text }]}>
-            {p.firstName} {p.lastName}
-          </Text>
-          <Text style={[styles.relativeRelation, { color: theme.colors.textSecondary }]}>
-            {relation}
-          </Text>
-          {p.birthYear && (
-            <Text style={[styles.relativeDates, { color: theme.colors.textSecondary }]}>
-              {p.birthYear}{p.deathYear ? ` - ${p.deathYear}` : ''}
+    <Pressable key={p.id} onPress={() => handlePersonPress(p.id)}>
+      <Card variant="elevated" padding="md" style={styles.relativeCard}>
+        <View style={styles.relativeCardContent}>
+          <View style={[styles.relativeAvatar, { backgroundColor: theme.colors.primary + '15' }]}>
+            <Text style={styles.relativeAvatarText}>👤</Text>
+          </View>
+          <View style={styles.relativeInfo}>
+            <Text style={styles.relativeName}>
+              {p.firstName} {p.lastName}
             </Text>
-          )}
+            <Text style={styles.relativeRelation}>{relation}</Text>
+            {p.birthYear && (
+              <Text style={styles.relativeDates}>
+                {p.birthYear}
+                {p.deathYear ? ` - ${p.deathYear}` : ''}
+              </Text>
+            )}
+          </View>
         </View>
-      </View>
-    </Card>
+      </Card>
     </Pressable>
   );
-  
+
   return (
     <View style={styles.tabContentInner}>
       {parents.length > 0 && (
         <>
-          <Text style={[styles.sectionTitle, { color: theme.colors.text }]}>
-            {t('person.parents')}
-          </Text>
+          <Text style={styles.sectionTitle}>{t('person.parents')}</Text>
           <Spacer size="sm" />
-          {parents.map((p) => renderPersonCard(p, t('person.parents')))}
+          {parents.map((p: any) => renderPersonCard(p, t('person.parents')))}
           <Spacer size="md" />
         </>
       )}
-      
+
       {partner && (
         <>
-          <Text style={[styles.sectionTitle, { color: theme.colors.text }]}>
-            {t('person.partner')}
-          </Text>
+          <Text style={styles.sectionTitle}>{t('person.partner')}</Text>
           <Spacer size="sm" />
           {renderPersonCard(partner, t('person.partner'))}
           <Spacer size="md" />
         </>
       )}
-      
+
       {children.length > 0 && (
         <>
-          <Text style={[styles.sectionTitle, { color: theme.colors.text }]}>
-            {t('person.children')}
-          </Text>
+          <Text style={styles.sectionTitle}>{t('person.children')}</Text>
           <Spacer size="sm" />
-          {children.map((p) => renderPersonCard(p, t('person.children')))}
+          {children.map((p: any) => renderPersonCard(p, t('person.children')))}
           <Spacer size="md" />
         </>
       )}
-      
+
       {siblings.length > 0 && (
         <>
-          <Text style={[styles.sectionTitle, { color: theme.colors.text }]}>
-            {t('person.siblings')}
-          </Text>
+          <Text style={styles.sectionTitle}>{t('person.siblings')}</Text>
           <Spacer size="sm" />
-          {siblings.map((p) => renderPersonCard(p, t('person.siblings')))}
+          {siblings.map((p: any) => renderPersonCard(p, t('person.siblings')))}
         </>
       )}
-      
+
       {parents.length === 0 && !partner && children.length === 0 && siblings.length === 0 && (
         <View style={styles.emptyState}>
-          <Text style={{ color: theme.colors.textSecondary }}>
-            {t('person.noPersonSelected')}
-          </Text>
+          <Text style={styles.emptyField}>{t('person.noPersonSelected')}</Text>
         </View>
       )}
     </View>
@@ -1083,6 +1065,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     padding: 20,
   },
+
   header: {
     flexDirection: 'row',
     justifyContent: 'space-between',
@@ -1091,24 +1074,63 @@ const styles = StyleSheet.create({
     paddingVertical: 12,
     borderBottomWidth: 1,
     borderBottomColor: '#E0E0E0',
+    backgroundColor: '#FFFFFF',
   },
+
   headerTitle: {
     fontSize: 20,
     fontWeight: '700',
+    color: '#1A1A1A',
   },
+
+  // ✅ Boutons header clean (plus de carré blanc, plus d’ombre)
+  headerIconBtn: {
+    width: 40,
+    height: 40,
+    borderRadius: 999,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: 'transparent',
+
+    borderWidth: 0,
+    borderColor: 'transparent',
+
+    elevation: 0,
+    shadowColor: 'transparent',
+    shadowOpacity: 0,
+    shadowRadius: 0,
+    shadowOffset: { width: 0, height: 0 },
+
+    overflow: 'hidden',
+  },
+
+  headerIconText: {
+    fontSize: 18,
+    color: '#1A1A1A',
+  },
+
   scrollView: {
     flex: 1,
   },
+
   profileHeader: {
-    padding: 24,
+    paddingTop: 24,
+    paddingHorizontal: 24,
+    paddingBottom: 24,
     alignItems: 'center',
     borderBottomWidth: 1,
     borderBottomColor: '#E0E0E0',
+    backgroundColor: '#FFFFFF',
+    // ✅ Force une vraie hauteur visible
+    minHeight: 220, // Essaie 280 / 320 / 360
+    justifyContent: 'center', // Optionnel : centre le contenu
   },
+
   avatarContainer: {
     position: 'relative',
     marginBottom: 16,
   },
+
   avatar: {
     width: 100,
     height: 100,
@@ -1118,6 +1140,7 @@ const styles = StyleSheet.create({
     borderWidth: 3,
     borderColor: '#FFFFFF',
   },
+
   avatarImage: {
     width: 100,
     height: 100,
@@ -1125,52 +1148,77 @@ const styles = StyleSheet.create({
     borderWidth: 3,
     borderColor: '#FFFFFF',
   },
+
   avatarText: {
     fontSize: 40,
   },
+
+  // ✅ Camera button clean (si tu veux garder le style “chip” blanc, ok, mais pas d’ombre)
   cameraButton: {
     position: 'absolute',
     bottom: 0,
     right: 0,
     width: 32,
     height: 32,
-    borderRadius: 16,
+    borderRadius: 999,
     backgroundColor: '#FFFFFF',
     alignItems: 'center',
     justifyContent: 'center',
-    borderWidth: 2,
-    borderColor: '#E0E0E0',
+
+    // Important: si tu veux enlever le “carré” perçu → mets borderWidth: 0
+    borderWidth: 0,
+    borderColor: 'transparent',
+
+    // pas d’ombre
+    elevation: 0,
+    shadowColor: 'transparent',
+    shadowOpacity: 0,
+    shadowRadius: 0,
+    shadowOffset: { width: 0, height: 0 },
+
+    overflow: 'hidden',
   },
+
   cameraIcon: {
     fontSize: 16,
   },
+
   name: {
     fontSize: 24,
     fontWeight: '700',
     marginBottom: 8,
+    color: '#1A1A1A',
   },
+
   birthInfo: {
     fontSize: 14,
-    marginBottom: 8,
+    marginBottom: 0, // ✅ Pas de marginBottom pour éviter le débordement
+    marginTop: 4,
+    color: '#666666',
+    textAlign: 'center',
   },
+
   tabsContainer: {
     flexDirection: 'row',
     borderBottomWidth: 1,
     borderBottomColor: '#E0E0E0',
+    backgroundColor: '#FFFFFF',
   },
+
   tab: {
     flex: 1,
     paddingVertical: 16,
     alignItems: 'center',
     position: 'relative',
   },
-  tabActive: {
-    // Active state styling
-  },
+
+  tabActive: {},
+
   tabText: {
     fontSize: 14,
-    color: '#666',
+    fontWeight: '500',
   },
+
   tabIndicator: {
     position: 'absolute',
     bottom: 0,
@@ -1178,116 +1226,159 @@ const styles = StyleSheet.create({
     right: 0,
     height: 2,
   },
+
   tabContent: {
     flex: 1,
     padding: 16,
+    backgroundColor: '#F5F5F0',
   },
+
   tabContentInner: {
     flex: 1,
   },
+
   sectionCard: {
     marginBottom: 16,
+    backgroundColor: '#FFFFFF',
+    borderRadius: 12,
+
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 4,
+    elevation: 3,
   },
+
   sectionTitle: {
     fontSize: 18,
     fontWeight: '600',
     marginBottom: 12,
+    color: '#1A1A1A',
   },
+
   contactRow: {
     flexDirection: 'row',
     justifyContent: 'space-between',
-    paddingVertical: 8,
+    paddingVertical: 12,
     borderBottomWidth: 1,
-    borderBottomColor: '#F0F0F0',
+    borderBottomColor: '#F5F5F5',
   },
+
   contactLabel: {
     fontSize: 14,
     fontWeight: '500',
     flex: 1,
+    color: '#1A1A1A',
   },
+
   contactValue: {
     fontSize: 14,
     flex: 2,
     textAlign: 'right',
+    color: '#1976D2',
   },
-  socialLinkRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingVertical: 12,
-    borderBottomWidth: 1,
-    borderBottomColor: '#F0F0F0',
-  },
-  socialIcon: {
-    fontSize: 20,
-    marginRight: 12,
-  },
-  socialLabel: {
-    fontSize: 14,
-    fontWeight: '500',
-    flex: 1,
-  },
-  socialUrl: {
-    fontSize: 12,
-    flex: 2,
-    textAlign: 'right',
-  },
+
   eventCard: {
     marginBottom: 12,
+    backgroundColor: '#FFFFFF',
+    borderRadius: 12,
+
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 4,
+    elevation: 3,
   },
+
   eventHeader: {
     flexDirection: 'row',
     alignItems: 'flex-start',
   },
+
   eventIcon: {
     fontSize: 24,
     marginRight: 12,
   },
+
   eventInfo: {
     flex: 1,
   },
+
   eventType: {
     fontSize: 16,
     fontWeight: '600',
     marginBottom: 4,
+    color: '#1A1A1A',
   },
+
   eventDate: {
     fontSize: 14,
     marginBottom: 4,
+    color: '#666666',
   },
+
   eventPlace: {
     fontSize: 12,
     marginBottom: 4,
+    color: '#666666',
   },
+
   eventDescription: {
     fontSize: 12,
     marginTop: 4,
+    color: '#666666',
   },
+
   emptyState: {
     flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
     padding: 40,
   },
+
   emptyMediaCard: {
     alignItems: 'center',
     width: '100%',
+    backgroundColor: '#FFFFFF',
+    borderRadius: 12,
+
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 4,
+    elevation: 3,
   },
+
   emptyMediaText: {
     fontSize: 18,
     fontWeight: '600',
     textAlign: 'center',
+    color: '#1A1A1A',
   },
+
   emptyMediaSubtext: {
     fontSize: 14,
     textAlign: 'center',
+    color: '#666666',
   },
+
   relativeCard: {
     marginBottom: 12,
+    backgroundColor: '#FFFFFF',
+    borderRadius: 12,
+
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 4,
+    elevation: 3,
   },
+
   relativeCardContent: {
     flexDirection: 'row',
     alignItems: 'center',
   },
+
   relativeAvatar: {
     width: 50,
     height: 50,
@@ -1296,79 +1387,102 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     marginRight: 12,
   },
+
   relativeAvatarText: {
     fontSize: 20,
   },
+
   relativeInfo: {
     flex: 1,
   },
+
   relativeName: {
     fontSize: 16,
     fontWeight: '600',
     marginBottom: 4,
+    color: '#1A1A1A',
   },
+
   relativeRelation: {
     fontSize: 12,
     marginBottom: 2,
+    color: '#666666',
   },
+
   relativeDates: {
     fontSize: 12,
+    color: '#666666',
   },
+
   editInput: {
     width: '100%',
   },
+
   editButtons: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     width: '100%',
   },
+
   editButton: {
     flex: 1,
   },
+
   emptyField: {
     fontSize: 14,
     fontStyle: 'italic',
     textAlign: 'center',
     paddingVertical: 16,
+    color: '#999999',
   },
+
   sectionHeader: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
   },
+
   infoRow: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     paddingVertical: 12,
     borderBottomWidth: 1,
-    borderBottomColor: '#F0F0F0',
+    borderBottomColor: '#F5F5F5',
   },
+
   infoLabel: {
     fontSize: 14,
     fontWeight: '500',
     flex: 1,
+    color: '#666666',
   },
+
   infoValue: {
     fontSize: 14,
     flex: 2,
     textAlign: 'right',
+    color: '#1A1A1A',
   },
+
   genderContainer: {
     marginBottom: 8,
   },
+
   genderLabel: {
     marginBottom: 8,
   },
+
   genderOptions: {
     flexDirection: 'row',
     gap: 8,
   },
+
   genderButton: {
     flex: 1,
   },
+
   notesInput: {
     minHeight: 100,
     textAlignVertical: 'top',
   },
 });
-
