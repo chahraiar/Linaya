@@ -11,7 +11,11 @@
     "view": "View",
     "loading": "Loading...",
     "success": "Success",
-    "error": "Error"
+    "error": "Error",
+    "required": "required",
+    "create": "Create",
+    "skip": "Skip",
+    "ok": "OK"
   },
   "tree": {
     "title": "Tree",
@@ -27,7 +31,8 @@
     "emptyTreeDescription": "Your family tree exists but doesn't contain any person yet. Create your profile to get started.",
     "createFirstPerson": "Create my profile",
     "treeCreated": "Tree created",
-    "treeCreatedMessage": "Your family tree has been created successfully. You can now add family members."
+    "treeCreatedMessage": "Your family tree has been created successfully. You can now add family members.",
+    "personAdded": "Person added successfully"
   },
   "auth": {
     "welcome": "Welcome to Linaya",
@@ -103,7 +108,15 @@
     "partner": "Partner",
     "children": "Children",
     "siblings": "Siblings",
-    "gender": "Gender",
+    "gender": {
+      "label": "Gender",
+      "male": "Male",
+      "female": "Female",
+      "other": "Other"
+    },
+    "displayName": "Display name",
+    "birthDate": "Birth date",
+    "selectBirthDate": "Select a date",
     "noContactInfo": "No contact information",
     "noData": "No data available",
     "changePhoto": "Change Photo",
@@ -114,7 +127,21 @@
     "photoPickError": "Error selecting image",
     "photoTakeError": "Error taking photo",
     "photoUploaded": "Photo uploaded successfully",
-    "photoUploadError": "Error uploading photo"
+    "photoUploadError": "Error uploading photo",
+    "deletePerson": "Delete person",
+    "deletePersonConfirm": "Are you sure you want to delete this person? This action cannot be undone.",
+    "personDeleted": "Person deleted successfully",
+    "cannotDeleteSelf": "You cannot delete your own profile",
+    "deleteError": "Error deleting person",
+    "addPartner": "Add partner",
+    "addParentDescription": "Add a parent of this person",
+    "addChildDescription": "Add a child of this person",
+    "addPartnerDescription": "Add a partner to this person",
+    "selectRelationships": "Additional relationships",
+    "selectRelationshipsDescription": "Would you like to create additional relationships for this person?",
+    "partnerWithParent": "Create a partner relationship with",
+    "parentWithPartner": "Create a parent relationship with",
+    "parentWithChildren": "Create a parent relationship with:"
   },
   "settings": {
     "title": "Settings",

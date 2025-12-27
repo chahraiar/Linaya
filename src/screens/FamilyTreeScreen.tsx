@@ -17,9 +17,11 @@ import {
   getTreeData, 
   createTree, 
   createPersonFromProfile,
+  createPerson,
   Profile,
   Tree 
 } from '../services/treeService';
+import { AddPersonModal } from '../components/AddPersonModal';
 import { supabase } from '../lib/supabase';
 
 const { width: SCREEN_WIDTH, height: SCREEN_HEIGHT } = Dimensions.get('window');
@@ -33,10 +35,12 @@ export const FamilyTreeScreen: React.FC = () => {
   const { t } = useTranslation();
   const { theme } = useTheme();
   const navigation = useNavigation<NavigationProp>();
-  const { persons, setPersons, getPerson, selectedPersonId } = useFamilyTreeStore();
+  const { persons, setPersons, getPerson, selectedPersonId, addPerson } = useFamilyTreeStore();
   const [clusters, setClusters] = useState<Cluster[]>([]);
   const [searchQuery, setSearchQuery] = useState('');
   const [showAddMenu, setShowAddMenu] = useState(false);
+  const [showAddPersonModal, setShowAddPersonModal] = useState(false);
+  const [addingPerson, setAddingPerson] = useState(false);
   
   // User and tree state
   const [profile, setProfile] = useState<Profile | null>(null);
@@ -277,6 +281,61 @@ export const FamilyTreeScreen: React.FC = () => {
       );
     } finally {
       setCreatingTree(false);
+    }
+  };
+
+  const handleAddPerson = async (data: {
+    firstName: string;
+    lastName: string;
+    displayName?: string;
+    birthDate?: Date;
+    gender?: string;
+  }) => {
+    if (!currentTree) {
+      Alert.alert(t('common.error'), 'Aucun arbre sélectionné');
+      return;
+    }
+
+    try {
+      setAddingPerson(true);
+      console.log('➕ Creating new person:', data);
+
+      const newPerson = await createPerson(
+        currentTree.id,
+        data.firstName,
+        data.lastName,
+        data.displayName,
+        data.birthDate,
+        data.gender
+      );
+
+      if (!newPerson) {
+        Alert.alert(t('common.error'), 'Erreur lors de la création de la personne');
+        return;
+      }
+
+      console.log('✅ Person created:', newPerson.id);
+
+      // Add person to store immediately
+      addPerson(newPerson);
+
+      // Reload tree data to include the new person and relationships
+      const { persons: updatedPersons } = await getTreeData(currentTree.id);
+      setPersons(updatedPersons);
+
+      Alert.alert(
+        t('common.success'),
+        t('tree.personAdded') || 'Personne ajoutée avec succès',
+        [{ text: t('common.ok') }]
+      );
+    } catch (error) {
+      console.error('❌ Error adding person:', error);
+      Alert.alert(
+        t('common.error'),
+        `Erreur lors de l'ajout de la personne: ${error instanceof Error ? error.message : 'Erreur inconnue'}`
+      );
+    } finally {
+      setAddingPerson(false);
     }
   };
 
@@ -752,13 +811,8 @@ export const FamilyTreeScreen: React.FC = () => {
             <Button 
               variant="primary" 
               onPress={() => {
-                console.log('➕ Add person button pressed');
                 setShowAddMenu(false);
-                // TODO: Implement add person functionality
-                Alert.alert(
-                  t('tree.addPerson'),
-                  'Fonctionnalité à venir'
-                );
+                setShowAddPersonModal(true);
               }}
             >
               {t('tree.addPerson')}
@@ -770,6 +824,14 @@ export const FamilyTreeScreen: React.FC = () => {
           </Card>
         </Pressable>
       </Modal>
+
+      {/* Add Person Modal */}
+      <AddPersonModal
+        visible={showAddPersonModal}
+        onClose={() => setShowAddPersonModal(false)}
+        onSubmit={handleAddPerson}
+        loading={addingPerson}
+      />
         </>
       )}
     </Screen>

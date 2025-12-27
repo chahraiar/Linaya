@@ -26,7 +26,7 @@ $$ LANGUAGE plpgsql SECURITY DEFINER;
 ALTER FUNCTION public.get_user_trees(uuid) SET search_path = family_tree, public;
 
 -- ============================================================================
--- FUNCTION: Get current user profile
+-- FUNCTION: Get current user profile (creates it if it doesn't exist)
 -- ============================================================================
 CREATE OR REPLACE FUNCTION public.get_current_user_profile()
 RETURNS TABLE (
@@ -38,7 +38,40 @@ RETURNS TABLE (
   created_at timestamptz,
   updated_at timestamptz
 ) AS $$
+DECLARE
+  v_user_id uuid;
+  v_user_email text;
+  v_display_name text;
 BEGIN
+  v_user_id := auth.uid();
+  
+  IF v_user_id IS NULL THEN
+    RETURN;
+  END IF;
+
+  -- Check if profile exists
+  IF NOT EXISTS (
+    SELECT 1
+    FROM family_tree.profiles p
+    WHERE p.id = v_user_id
+  ) THEN
+    -- Profile doesn't exist, create it
+    -- Get user email from auth.users
+    SELECT u.email INTO v_user_email
+    FROM auth.users u
+    WHERE u.id = v_user_id;
+    
+    -- Use email as display_name if available
+    v_display_name := COALESCE(v_user_email, 'Utilisateur');
+    
+    -- Create profile
+    -- Use ON CONFLICT ON CONSTRAINT to avoid ambiguity with RETURNS TABLE id variable
+    INSERT INTO family_tree.profiles (id, display_name, locale, theme)
+    VALUES (v_user_id, v_display_name, 'fr', 'aurora')
+    ON CONFLICT ON CONSTRAINT profiles_pkey DO NOTHING;
+  END IF;
+
+  -- Return profile
   RETURN QUERY
   SELECT
     p.id,
@@ -49,12 +82,12 @@ BEGIN
     p.created_at,
     p.updated_at
   FROM family_tree.profiles p
-  WHERE p.id = auth.uid();
+  WHERE p.id = v_user_id;
 END;
 $$ LANGUAGE plpgsql SECURITY DEFINER;
 
--- Fix search_path for security
-ALTER FUNCTION public.get_current_user_profile() SET search_path = family_tree, public;
+-- Fix search_path for security (include auth schema to access auth.users)
+ALTER FUNCTION public.get_current_user_profile() SET search_path = family_tree, public, auth;
 
 -- ============================================================================
 -- FUNCTION: Get tree persons and relationships
@@ -986,6 +1019,232 @@ GRANT EXECUTE ON FUNCTION public.get_person_detail(uuid) TO authenticated;
 
 COMMENT ON FUNCTION public.get_person_detail(uuid) IS 'Get complete person details (person, contacts, photo, events) in a single call';
 
+-- Function to create a relationship between two persons
+DROP FUNCTION IF EXISTS public.create_person_relationship(uuid, uuid, text, text);
+CREATE OR REPLACE FUNCTION public.create_person_relationship(
+  p_from_person_id uuid,
+  p_to_person_id uuid,
+  p_relationship_type text,
+  p_notes text DEFAULT NULL
+)
+RETURNS TABLE (
+  relationship_id uuid,
+  relationship_tree_id uuid,
+  relationship_from_person_id uuid,
+  relationship_to_person_id uuid,
+  relationship_type text,
+  relationship_notes text,
+  relationship_created_at timestamptz
+) AS $$
+DECLARE
+  v_user_id uuid;
+  v_tree_id uuid;
+  v_to_tree_id uuid;
+  v_relationship_id uuid;
+BEGIN
+  v_user_id := auth.uid();
+  
+  IF v_user_id IS NULL THEN
+    RAISE EXCEPTION 'User not authenticated';
+  END IF;
+
+  -- Validate relationship type
+  IF p_relationship_type NOT IN ('parent', 'partner') THEN
+    RAISE EXCEPTION 'Invalid relationship type. Must be "parent" or "partner"';
+  END IF;
+
+  -- Get tree_id from from_person
+  SELECT p.tree_id INTO v_tree_id
+  FROM family_tree.persons AS p
+  WHERE p.id = p_from_person_id AND p.deleted_at IS NULL;
+  
+  IF v_tree_id IS NULL THEN
+    RAISE EXCEPTION 'From person not found';
+  END IF;
+
+  -- Get tree_id from to_person and verify it's the same tree
+  SELECT p.tree_id INTO v_to_tree_id
+  FROM family_tree.persons AS p
+  WHERE p.id = p_to_person_id AND p.deleted_at IS NULL;
+  
+  IF v_to_tree_id IS NULL THEN
+    RAISE EXCEPTION 'To person not found';
+  END IF;
+
+  IF v_tree_id != v_to_tree_id THEN
+    RAISE EXCEPTION 'Both persons must be in the same tree';
+  END IF;
+
+  -- Check that user is owner/editor of the tree
+  IF NOT EXISTS (
+    SELECT 1
+    FROM family_tree.tree_members AS tm
+    WHERE tm.tree_id = v_tree_id
+      AND tm.user_id = v_user_id
+      AND tm.status = 'active'
+      AND tm.role IN ('owner','editor')
+  ) THEN
+    RAISE EXCEPTION 'Not allowed to create relationships in this tree';
+  END IF;
+
+  -- Prevent self-relationship
+  IF p_from_person_id = p_to_person_id THEN
+    RAISE EXCEPTION 'Cannot create relationship with self';
+  END IF;
+
+  -- Insert relationship (ON CONFLICT DO NOTHING to handle duplicates)
+  INSERT INTO family_tree.person_relationships (
+    tree_id,
+    from_person_id,
+    to_person_id,
+    type,
+    notes
+  )
+  VALUES (
+    v_tree_id,
+    p_from_person_id,
+    p_to_person_id,
+    p_relationship_type,
+    p_notes
+  )
+  ON CONFLICT (tree_id, from_person_id, to_person_id, type) DO NOTHING
+  RETURNING family_tree.person_relationships.id INTO v_relationship_id;
+
+  -- If relationship already exists, get its ID
+  IF v_relationship_id IS NULL THEN
+    SELECT pr.id INTO v_relationship_id
+    FROM family_tree.person_relationships AS pr
+    WHERE pr.tree_id = v_tree_id
+      AND pr.from_person_id = p_from_person_id
+      AND pr.to_person_id = p_to_person_id
+      AND pr.type = p_relationship_type;
+  END IF;
+
+  -- Return the relationship
+  RETURN QUERY
+  SELECT
+    pr.id AS relationship_id,
+    pr.tree_id AS relationship_tree_id,
+    pr.from_person_id AS relationship_from_person_id,
+    pr.to_person_id AS relationship_to_person_id,
+    pr.type AS relationship_type,
+    pr.notes AS relationship_notes,
+    pr.created_at AS relationship_created_at
+  FROM family_tree.person_relationships AS pr
+  WHERE pr.id = v_relationship_id;
+END;
+$$ LANGUAGE plpgsql SECURITY DEFINER;
+
+ALTER FUNCTION public.create_person_relationship(uuid, uuid, text, text) SET search_path = family_tree, public;
+
+GRANT EXECUTE ON FUNCTION public.create_person_relationship(uuid, uuid, text, text) TO authenticated;
+
+COMMENT ON FUNCTION public.create_person_relationship(uuid, uuid, text, text) IS 'Create a relationship between two persons (parent or partner)';
+
+-- Function to delete a person (soft delete)
+DROP FUNCTION IF EXISTS public.delete_person(uuid);
+CREATE OR REPLACE FUNCTION public.delete_person(p_person_id uuid)
+RETURNS boolean AS $$
+DECLARE
+  v_user_id uuid;
+  v_tree_id uuid;
+  v_is_self_person boolean;
+BEGIN
+  v_user_id := auth.uid();
+  
+  IF v_user_id IS NULL THEN
+    RAISE EXCEPTION 'User not authenticated';
+  END IF;
+
+  -- Get tree_id from person
+  SELECT p.tree_id INTO v_tree_id
+  FROM family_tree.persons AS p
+  WHERE p.id = p_person_id AND p.deleted_at IS NULL;
+  
+  IF v_tree_id IS NULL THEN
+    RAISE EXCEPTION 'Person not found';
+  END IF;
+
+  -- Check that user is owner/editor of the tree
+  IF NOT EXISTS (
+    SELECT 1
+    FROM family_tree.tree_members AS tm
+    WHERE tm.tree_id = v_tree_id
+      AND tm.user_id = v_user_id
+      AND tm.status = 'active'
+      AND tm.role IN ('owner','editor')
+  ) THEN
+    RAISE EXCEPTION 'Not allowed to delete persons in this tree';
+  END IF;
+
+  -- Check if this person is the user's own person (via tree_self_person)
+  SELECT EXISTS (
+    SELECT 1
+    FROM family_tree.tree_self_person AS tsp
+    WHERE tsp.tree_id = v_tree_id
+      AND tsp.user_id = v_user_id
+      AND tsp.person_id = p_person_id
+  ) INTO v_is_self_person;
+
+  IF v_is_self_person THEN
+    RAISE EXCEPTION 'Cannot delete your own person profile';
+  END IF;
+
+  -- Soft delete the person
+  UPDATE family_tree.persons AS p
+  SET deleted_at = now()
+  WHERE p.id = p_person_id AND p.deleted_at IS NULL;
+
+  RETURN FOUND;
+END;
+$$ LANGUAGE plpgsql SECURITY DEFINER;
+
+ALTER FUNCTION public.delete_person(uuid) SET search_path = family_tree, public;
+
+GRANT EXECUTE ON FUNCTION public.delete_person(uuid) TO authenticated;
+
+COMMENT ON FUNCTION public.delete_person(uuid) IS 'Soft delete a person (cannot delete your own person profile)';
+
+-- Function to check if a person is the current user's self person
+DROP FUNCTION IF EXISTS public.is_self_person(uuid);
+CREATE OR REPLACE FUNCTION public.is_self_person(p_person_id uuid)
+RETURNS boolean AS $$
+DECLARE
+  v_user_id uuid;
+  v_tree_id uuid;
+BEGIN
+  v_user_id := auth.uid();
+  
+  IF v_user_id IS NULL THEN
+    RETURN false;
+  END IF;
+
+  -- Get tree_id from person
+  SELECT p.tree_id INTO v_tree_id
+  FROM family_tree.persons AS p
+  WHERE p.id = p_person_id AND p.deleted_at IS NULL;
+  
+  IF v_tree_id IS NULL THEN
+    RETURN false;
+  END IF;
+
+  -- Check if this person is linked to the current user
+  RETURN EXISTS (
+    SELECT 1
+    FROM family_tree.tree_self_person AS tsp
+    WHERE tsp.tree_id = v_tree_id
+      AND tsp.user_id = v_user_id
+      AND tsp.person_id = p_person_id
+  );
+END;
+$$ LANGUAGE plpgsql SECURITY DEFINER;
+
+ALTER FUNCTION public.is_self_person(uuid) SET search_path = family_tree, public;
+
+GRANT EXECUTE ON FUNCTION public.is_self_person(uuid) TO authenticated;
+
+COMMENT ON FUNCTION public.is_self_person(uuid) IS 'Check if a person is the current user''s self person';
+
 -- Function to fix missing tree members (repair function)
 -- This adds owners to tree_members if they are missing
 -- Useful if trees were created before the trigger was in place
@@ -1048,4 +1307,7 @@ SET search_path = public, family_tree;
 GRANT EXECUTE ON FUNCTION public.fix_missing_tree_members() TO authenticated;
 
 COMMENT ON FUNCTION public.fix_missing_tree_members() IS 'Repair function: Add missing owners to tree_members table';
+
+-- Force PostgREST to reload schema cache after creating new functions
+NOTIFY pgrst, 'reload schema';
 

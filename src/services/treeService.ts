@@ -279,6 +279,88 @@ export const createPersonFromProfile = async (
 };
 
 /**
+ * Create a new person in a tree (manual creation)
+ */
+export const createPerson = async (
+  treeId: string,
+  firstName: string,
+  lastName: string,
+  displayName?: string,
+  birthDate?: Date,
+  gender?: string
+): Promise<Person | null> => {
+  try {
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) {
+      throw new Error('User not authenticated');
+    }
+
+    // Generate display name if not provided
+    const finalDisplayName = displayName || `${firstName} ${lastName}`.trim() || 'Nouvelle personne';
+
+    // Use RPC function (SECURITY DEFINER bypasses RLS and handles linking)
+    const { data: personDataArray, error: personError } = await supabase
+      .rpc('create_person_from_profile', {
+        p_tree_id: treeId,
+        p_first_name: firstName.trim(),
+        p_last_name: lastName.trim(),
+        p_display_name: finalDisplayName,
+      });
+
+    if (personError) {
+      console.error('Error creating person:', personError);
+      return null;
+    }
+
+    if (!personDataArray || personDataArray.length === 0) {
+      return null;
+    }
+
+    const personData = personDataArray[0];
+    const personId = personData.person_id || personData.id;
+
+    // If birth date or gender provided, update the person
+    if (birthDate || gender) {
+      const updateData: any = {};
+      if (birthDate) {
+        updateData.p_birth_date = birthDate.toISOString().split('T')[0]; // Format YYYY-MM-DD
+      }
+      if (gender) {
+        updateData.p_gender = gender;
+      }
+
+      const { error: updateError } = await supabase
+        .rpc('update_person', {
+          p_person_id: personId,
+          ...updateData,
+        });
+
+      if (updateError) {
+        console.error('Error updating person after creation:', updateError);
+        // Continue anyway, person was created
+      }
+    }
+
+    // Convert to app format
+    const person: Person = {
+      id: personId,
+      firstName: personData.first_name || firstName.trim(),
+      lastName: personData.last_name || lastName.trim(),
+      birthYear: birthDate ? birthDate.getFullYear() : undefined,
+      deathYear: undefined,
+      parentIds: [],
+      partnerId: undefined,
+      childrenIds: [],
+    };
+
+    return person;
+  } catch (error) {
+    console.error('Error in createPerson:', error);
+    return null;
+  }
+};
+
+/**
  * Update a person
  */
 export const updatePerson = async (
@@ -623,6 +705,91 @@ export const getPersonPhotoUrl = async (personId: string): Promise<string | null
   } catch (error) {
     console.error('Error in getPersonPhotoUrl:', error);
     return null;
+  }
+};
+
+/**
+ * Create a relationship between two persons
+ */
+export const createRelationship = async (
+  fromPersonId: string,
+  toPersonId: string,
+  relationshipType: 'parent' | 'partner',
+  notes?: string
+): Promise<boolean> => {
+  try {
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) {
+      throw new Error('User not authenticated');
+    }
+
+    const { data, error } = await supabase
+      .rpc('create_person_relationship', {
+        p_from_person_id: fromPersonId,
+        p_to_person_id: toPersonId,
+        p_relationship_type: relationshipType,
+        p_notes: notes || null,
+      });
+
+    if (error) {
+      console.error('Error creating relationship:', error);
+      return false;
+    }
+
+    return data && data.length > 0;
+  } catch (error) {
+    console.error('Error in createRelationship:', error);
+    return false;
+  }
+};
+
+/**
+ * Check if a person is the current user's self person
+ */
+export const isSelfPerson = async (personId: string): Promise<boolean> => {
+  try {
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) {
+      return false;
+    }
+
+    const { data, error } = await supabase
+      .rpc('is_self_person', { p_person_id: personId });
+
+    if (error) {
+      console.error('Error checking if self person:', error);
+      return false;
+    }
+
+    return data === true;
+  } catch (error) {
+    console.error('Error in isSelfPerson:', error);
+    return false;
+  }
+};
+
+/**
+ * Delete a person (soft delete)
+ */
+export const deletePerson = async (personId: string): Promise<boolean> => {
+  try {
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) {
+      throw new Error('User not authenticated');
+    }
+
+    const { data, error } = await supabase
+      .rpc('delete_person', { p_person_id: personId });
+
+    if (error) {
+      console.error('Error deleting person:', error);
+      throw error;
+    }
+
+    return data === true;
+  } catch (error) {
+    console.error('Error in deletePerson:', error);
+    throw error;
   }
 };
 

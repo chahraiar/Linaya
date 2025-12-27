@@ -25,7 +25,12 @@ import {
   uploadPersonPhoto,
   getPersonPhotoUrl,
   ContactDB,
+  getTreeData,
+  isSelfPerson,
+  deletePerson,
 } from '../services/treeService';
+import { AddRelativeModal } from '../components/AddRelativeModal';
+import { supabase } from '../lib/supabase';
 
 type PersonDetailRouteProp = RouteProp<RootStackParamList, 'PersonDetail'>;
 type NavigationProp = NativeStackNavigationProp<RootStackParamList>;
@@ -64,6 +69,8 @@ export const PersonDetailScreen: React.FC = () => {
 
   const [photoUrl, setPhotoUrl] = useState<string | null>(null);
   const [isUploadingPhoto, setIsUploadingPhoto] = useState(false);
+  const [isSelf, setIsSelf] = useState(false);
+  const [isDeleting, setIsDeleting] = useState(false);
 
   const person = personId ? getPerson(personId) : null;
   const details = personId ? getPersonDetails(personId) : null;
@@ -73,9 +80,22 @@ export const PersonDetailScreen: React.FC = () => {
     if (personId) {
       loadContacts();
       loadPhoto();
+      checkIfSelf();
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [personId]);
+
+  // Check if this person is the current user's self person
+  const checkIfSelf = async () => {
+    if (!personId) return;
+    try {
+      const self = await isSelfPerson(personId);
+      setIsSelf(self);
+    } catch (error) {
+      console.error('Error checking if self person:', error);
+      setIsSelf(false);
+    }
+  };
 
   // Load person photo
   const loadPhoto = async () => {
@@ -238,6 +258,64 @@ export const PersonDetailScreen: React.FC = () => {
     }
   };
 
+  const handleDeletePerson = async () => {
+    if (!personId || !person) return;
+
+    Alert.alert(
+      t('person.deletePerson') || 'Supprimer la personne',
+      t('person.deletePersonConfirm') || `Êtes-vous sûr de vouloir supprimer ${person.firstName} ${person.lastName} ? Cette action est irréversible.`,
+      [
+        {
+          text: t('common.cancel'),
+          style: 'cancel',
+        },
+        {
+          text: t('common.delete'),
+          style: 'destructive',
+          onPress: async () => {
+            try {
+              setIsDeleting(true);
+              await deletePerson(personId);
+              
+              // Remove from store
+              const { deletePerson: deletePersonFromStore } = useFamilyTreeStore.getState();
+              deletePersonFromStore(personId);
+
+              Alert.alert(
+                t('common.success'),
+                t('person.personDeleted') || 'Personne supprimée avec succès',
+                [
+                  {
+                    text: t('common.ok'),
+                    onPress: () => navigation.goBack(),
+                  },
+                ]
+              );
+            } catch (error: any) {
+              console.error('Error deleting person:', error);
+              const errorMessage = error?.message || 'Erreur inconnue';
+              
+              // Check if error is about self person
+              if (errorMessage.includes('own person') || errorMessage.includes('self person')) {
+                Alert.alert(
+                  t('common.error'),
+                  t('person.cannotDeleteSelf') || 'Vous ne pouvez pas supprimer votre propre profil'
+                );
+              } else {
+                Alert.alert(
+                  t('common.error'),
+                  t('person.deleteError') || `Erreur lors de la suppression: ${errorMessage}`
+                );
+              }
+            } finally {
+              setIsDeleting(false);
+            }
+          },
+        },
+      ]
+    );
+  };
+
   const handlePickImage = async () => {
     try {
       const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
@@ -337,13 +415,27 @@ export const PersonDetailScreen: React.FC = () => {
           {t('person.profile')}
         </Text>
 
-        <Pressable
-          onPress={() => setIsEditing(!isEditing)}
-          style={styles.headerIconBtn}
-          hitSlop={8}
-        >
-          <Text style={styles.headerIconText}>{isEditing ? '✕' : '✏️'}</Text>
-        </Pressable>
+        <View style={styles.headerRightButtons}>
+          {!isSelf && (
+            <Pressable
+              onPress={handleDeletePerson}
+              style={[styles.headerIconBtn, styles.deleteButton]}
+              hitSlop={8}
+              disabled={isDeleting}
+            >
+              <Text style={[styles.headerIconText, styles.deleteButtonText]}>
+                🗑️
+              </Text>
+            </Pressable>
+          )}
+          <Pressable
+            onPress={() => setIsEditing(!isEditing)}
+            style={styles.headerIconBtn}
+            hitSlop={8}
+          >
+            <Text style={styles.headerIconText}>{isEditing ? '✕' : '✏️'}</Text>
+          </Pressable>
+        </View>
       </View>
 
       <ScrollView style={styles.scrollView} showsVerticalScrollIndicator={false}>
@@ -971,7 +1063,11 @@ const RelativesTab: React.FC<{ person: any }> = ({ person }) => {
   const { t } = useTranslation();
   const navigation = useNavigation<NavigationProp>();
   const { theme } = useTheme();
-  const { getPerson, getAllPersons } = useFamilyTreeStore();
+  const { getPerson, getAllPersons, setPersons } = useFamilyTreeStore();
+  
+  const [showAddParentModal, setShowAddParentModal] = useState(false);
+  const [showAddChildModal, setShowAddChildModal] = useState(false);
+  const [showAddPartnerModal, setShowAddPartnerModal] = useState(false);
 
   const parents = person.parentIds.map((id: string) => getPerson(id)).filter(Boolean);
   const partner = person.partnerId ? getPerson(person.partnerId) : null;
@@ -986,6 +1082,34 @@ const RelativesTab: React.FC<{ person: any }> = ({ person }) => {
 
   const handlePersonPress = (personId: string) => {
     navigation.push('PersonDetail', { personId });
+  };
+
+  const handleReloadData = async () => {
+    // Get tree_id from person
+    const personData = getPerson(person.id);
+    if (!personData) return;
+
+    // We need to get tree_id - for now, reload all persons from store
+    // In a real scenario, we'd get tree_id from the person
+    // For now, we'll just reload the store data
+    // This is a simplified approach - ideally we'd have tree_id in the person object
+    try {
+      // Get all persons from store to find tree_id
+      const allPersons = getAllPersons();
+      if (allPersons.length === 0) return;
+
+      // Get tree_id from first person (they should all be in same tree)
+      // This is a workaround - ideally person should have tree_id
+      const { data: treeIdData } = await supabase
+        .rpc('get_person_tree_id', { p_person_id: person.id });
+      
+      if (treeIdData) {
+        const { persons } = await getTreeData(treeIdData);
+        setPersons(persons);
+      }
+    } catch (error) {
+      console.error('Error reloading data:', error);
+    }
   };
 
   const renderPersonCard = (p: any, relation: string) => (
@@ -1051,9 +1175,63 @@ const RelativesTab: React.FC<{ person: any }> = ({ person }) => {
 
       {parents.length === 0 && !partner && children.length === 0 && siblings.length === 0 && (
         <View style={styles.emptyState}>
-          <Text style={styles.emptyField}>{t('person.noPersonSelected')}</Text>
+          <Text style={styles.emptyField}>{t('person.noRelatives') || 'Aucun proche'}</Text>
         </View>
       )}
+
+      <Spacer size="lg" />
+
+      {/* Add buttons */}
+      <View style={styles.addButtonsContainer}>
+        {parents.length < 2 && (
+          <Button
+            variant="secondary"
+            onPress={() => setShowAddParentModal(true)}
+            style={styles.addButton}
+          >
+            {`+ ${t('person.addParent')}`}
+          </Button>
+        )}
+        {!partner && (
+          <Button
+            variant="secondary"
+            onPress={() => setShowAddPartnerModal(true)}
+            style={styles.addButton}
+          >
+            {`+ ${t('person.addPartner') || 'Ajouter un conjoint'}`}
+          </Button>
+        )}
+        <Button
+          variant="secondary"
+          onPress={() => setShowAddChildModal(true)}
+          style={styles.addButton}
+        >
+          {`+ ${t('person.addChild')}`}
+        </Button>
+      </View>
+
+      {/* Modals */}
+      <AddRelativeModal
+        visible={showAddParentModal}
+        onClose={() => setShowAddParentModal(false)}
+        personId={person.id}
+        relationshipType="parent"
+        onPersonAdded={handleReloadData}
+      />
+      <AddRelativeModal
+        visible={showAddChildModal}
+        onClose={() => setShowAddChildModal(false)}
+        personId={person.id}
+        relationshipType="child"
+        onPersonAdded={handleReloadData}
+      />
+      <AddRelativeModal
+        visible={showAddPartnerModal}
+        onClose={() => setShowAddPartnerModal(false)}
+        personId={person.id}
+        relationshipType="partner"
+        onPersonAdded={handleReloadData}
+      />
     </View>
   );
 };
@@ -1083,7 +1261,13 @@ const styles = StyleSheet.create({
     color: '#1A1A1A',
   },
 
-  // ✅ Boutons header clean (plus de carré blanc, plus d’ombre)
+  // ✅ Boutons header clean (plus de carré blanc, plus d'ombre)
+  headerRightButtons: {
+    flexDirection: 'row',
+    gap: 8,
+    alignItems: 'center',
+  },
+
   headerIconBtn: {
     width: 40,
     height: 40,
@@ -1107,6 +1291,14 @@ const styles = StyleSheet.create({
   headerIconText: {
     fontSize: 18,
     color: '#1A1A1A',
+  },
+
+  deleteButton: {
+    opacity: 0.8,
+  },
+
+  deleteButtonText: {
+    fontSize: 18,
   },
 
   scrollView: {
@@ -1412,6 +1604,15 @@ const styles = StyleSheet.create({
   relativeDates: {
     fontSize: 12,
     color: '#666666',
+  },
+
+  addButtonsContainer: {
+    gap: 12,
+    marginTop: 16,
+  },
+
+  addButton: {
+    marginBottom: 0,
   },
 
   editInput: {
