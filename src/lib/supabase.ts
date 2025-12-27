@@ -21,6 +21,20 @@ if (!isSupabaseConfigured) {
   console.warn('⚠️ The app will run in demo mode (authentication disabled).');
 }
 
+// Validate Supabase URL format
+// IMPORTANT: For self-hosted Supabase, the URL must point to the API endpoint
+// (e.g., https://api.example.com, not https://example.com)
+// The API endpoint handles /storage/*, /rest/*, /auth/* routes via Kong
+if (isSupabaseConfigured && SUPABASE_URL) {
+  const url = SUPABASE_URL.toLowerCase();
+  if (!url.includes('/storage') && !url.includes('/rest') && !url.includes('/auth')) {
+    // URL looks like base domain, which is OK for self-hosted
+    console.log('✅ Supabase URL configured:', SUPABASE_URL);
+  } else {
+    console.warn('⚠️ Supabase URL may be incorrect. Should be base domain (e.g., https://api.example.com)');
+  }
+}
+
 // Create Supabase client only if configured, otherwise use dummy values
 // This prevents the app from crashing, but authentication won't work
 export const supabase = isSupabaseConfigured

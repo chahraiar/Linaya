@@ -9,7 +9,9 @@
     "settings": "Settings",
     "close": "Close",
     "view": "View",
-    "loading": "Loading..."
+    "loading": "Loading...",
+    "success": "Success",
+    "error": "Error"
   },
   "tree": {
     "title": "Tree",
@@ -100,7 +102,19 @@
     "parents": "Parents",
     "partner": "Partner",
     "children": "Children",
-    "siblings": "Siblings"
+    "siblings": "Siblings",
+    "gender": "Gender",
+    "noContactInfo": "No contact information",
+    "noData": "No data available",
+    "changePhoto": "Change Photo",
+    "takePhoto": "Take Photo",
+    "chooseFromLibrary": "Choose from Library",
+    "photoPermissionDenied": "Permission to access camera roll is required!",
+    "cameraPermissionDenied": "Permission to access camera is required!",
+    "photoPickError": "Error selecting image",
+    "photoTakeError": "Error taking photo",
+    "photoUploaded": "Photo uploaded successfully",
+    "photoUploadError": "Error uploading photo"
   },
   "settings": {
     "title": "Settings",

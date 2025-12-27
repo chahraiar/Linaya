@@ -9,7 +9,9 @@
     "settings": "Paramètres",
     "close": "Fermer",
     "view": "Voir",
-    "loading": "Chargement..."
+    "loading": "Chargement...",
+    "success": "Succès",
+    "error": "Erreur"
   },
   "tree": {
     "title": "Arbre",
@@ -100,7 +102,19 @@
     "parents": "Parents",
     "partner": "Conjoint(e)",
     "children": "Enfants",
-    "siblings": "Frères et sœurs"
+    "siblings": "Frères et sœurs",
+    "gender": "Genre",
+    "noContactInfo": "Aucune information de contact",
+    "noData": "Aucune donnée disponible",
+    "changePhoto": "Changer la photo",
+    "takePhoto": "Prendre une photo",
+    "chooseFromLibrary": "Choisir dans la bibliothèque",
+    "photoPermissionDenied": "L'autorisation d'accéder à la galerie est requise !",
+    "cameraPermissionDenied": "L'autorisation d'accéder à la caméra est requise !",
+    "photoPickError": "Erreur lors de la sélection de l'image",
+    "photoTakeError": "Erreur lors de la prise de photo",
+    "photoUploaded": "Photo téléchargée avec succès",
+    "photoUploadError": "Erreur lors du téléchargement de la photo"
   },
   "settings": {
     "title": "Paramètres",

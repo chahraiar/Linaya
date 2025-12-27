@@ -1,3 +1,4 @@
+import * as FileSystem from 'expo-file-system/legacy';
 import { supabase } from '../lib/supabase';
 import { Person } from '../store/familyTreeStore';
 
@@ -339,6 +340,288 @@ export const updatePerson = async (
     return person;
   } catch (error) {
     console.error('Error in updatePerson:', error);
+    return null;
+  }
+};
+
+/**
+ * Contact from database
+ */
+export interface ContactDB {
+  id: string;
+  person_id: string;
+  type: 'email' | 'mobile' | 'social' | 'website' | 'other';
+  label: string | null;
+  value: string;
+  is_primary: boolean;
+  visibility: 'private' | 'tree' | 'shared';
+  created_at: string;
+}
+
+/**
+ * Get person contacts
+ */
+export const getPersonContacts = async (personId: string): Promise<ContactDB[]> => {
+  try {
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) {
+      throw new Error('User not authenticated');
+    }
+
+    // Use RPC function
+    const { data, error } = await supabase
+      .rpc('get_person_contacts', { p_person_id: personId });
+
+    if (error) {
+      console.error('Error fetching contacts:', error);
+      return [];
+    }
+
+    return (data || []) as ContactDB[];
+  } catch (error) {
+    console.error('Error in getPersonContacts:', error);
+    return [];
+  }
+};
+
+/**
+ * Upsert a person contact
+ */
+export const upsertPersonContact = async (
+  personId: string,
+  type: 'email' | 'mobile' | 'social' | 'website' | 'other',
+  value: string,
+  label?: string,
+  isPrimary: boolean = false,
+  visibility: 'private' | 'tree' | 'shared' = 'tree'
+): Promise<ContactDB | null> => {
+  try {
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) {
+      throw new Error('User not authenticated');
+    }
+
+    // Use RPC function
+    const { data, error } = await supabase
+      .rpc('upsert_person_contact', {
+        p_person_id: personId,
+        p_type: type,
+        p_value: value,
+        p_label: label || null,
+        p_is_primary: isPrimary,
+        p_visibility: visibility,
+      });
+
+    if (error) {
+      console.error('Error upserting contact:', error);
+      return null;
+    }
+
+    if (!data || data.length === 0) {
+      return null;
+    }
+
+    // Map to ContactDB format
+    // The RPC function now returns columns with contact_ prefix to avoid ambiguity
+    const contact = data[0];
+    return {
+      id: contact.contact_id,
+      person_id: contact.contact_person_id,
+      type: contact.contact_type,
+      label: contact.contact_label,
+      value: contact.contact_value,
+      is_primary: contact.contact_is_primary,
+      visibility: contact.contact_visibility,
+      created_at: contact.created_at,
+    } as ContactDB;
+  } catch (error) {
+    console.error('Error in upsertPersonContact:', error);
+    return null;
+  }
+};
+
+/**
+ * Delete a person contact
+ */
+export const deletePersonContact = async (contactId: string): Promise<boolean> => {
+  try {
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) {
+      throw new Error('User not authenticated');
+    }
+
+    // Use RPC function
+    const { data, error } = await supabase
+      .rpc('delete_person_contact', { p_contact_id: contactId });
+
+    if (error) {
+      console.error('Error deleting contact:', error);
+      return false;
+    }
+
+    return data === true;
+  } catch (error) {
+    console.error('Error in deletePersonContact:', error);
+    return false;
+  }
+};
+
+/**
+ * Upload or update person profile photo
+ * Uses Edge Function with SERVICE_ROLE_KEY to bypass RLS Storage policies
+ */
+export const uploadPersonPhoto = async (
+  personId: string,
+  imageUri: string,
+  caption?: string,
+  takenAt?: Date
+): Promise<string | null> => {
+  try {
+    // Verify user authentication
+    const { data: { session }, error: sessionError } = await supabase.auth.getSession();
+    
+    if (sessionError || !session) {
+      console.error('❌ Session error:', sessionError);
+      throw new Error('User not authenticated - no active session. Please log in again.');
+    }
+
+    console.log('✅ User authenticated - userId:', session.user.id);
+
+    // Get tree_id directly from person using RPC function
+    const { data: treeId, error: treeIdError } = await supabase
+      .rpc('get_person_tree_id', { p_person_id: personId });
+
+    if (treeIdError) {
+      console.error('Error getting tree_id:', treeIdError);
+      throw new Error(`Could not find tree_id for person: ${treeIdError.message}`);
+    }
+
+    if (!treeId) {
+      console.error('treeId is null or undefined');
+      throw new Error('Could not find tree_id for person (null result)');
+    }
+
+    console.log('📸 Upload photo - treeId:', treeId, 'personId:', personId);
+
+    // Read file using expo-file-system as base64
+    const base64 = await FileSystem.readAsStringAsync(imageUri, {
+      encoding: 'base64',
+    });
+
+    // Determine file extension and MIME type
+    const fileExt = imageUri.split('.').pop() || 'jpg';
+    const mimeType = fileExt === 'png' ? 'image/png' : 
+                     fileExt === 'gif' ? 'image/gif' : 
+                     fileExt === 'webp' ? 'image/webp' : 'image/jpeg';
+
+    // Get Supabase URL and construct Edge Function URL
+    const supabaseUrl = process.env.EXPO_PUBLIC_SUPABASE_URL;
+    if (!supabaseUrl) {
+      throw new Error('EXPO_PUBLIC_SUPABASE_URL is not configured');
+    }
+
+    // Edge Functions are at: {SUPABASE_URL}/functions/v1/{function_name}
+    const edgeFunctionUrl = `${supabaseUrl}/functions/v1/upload_person_photo`;
+
+    console.log('📸 Uploading via Edge Function:', edgeFunctionUrl, 'base64 length:', base64.length);
+
+    // Get access token from session
+    const accessToken = session.access_token;
+
+    // Send base64 as JSON (React Native doesn't support Blob from Uint8Array)
+    const response = await fetch(edgeFunctionUrl, {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${accessToken}`,
+        'apikey': process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY || '',
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        file_base64: base64,
+        file_name: `photo.${fileExt}`,
+        mime_type: mimeType,
+        tree_id: treeId,
+        person_id: personId,
+      }),
+    });
+
+    if (!response.ok) {
+      const errorData = await response.json().catch(() => ({ error: 'Unknown error' }));
+      console.error('❌ Edge Function error:', response.status, errorData);
+      throw new Error(errorData.error || `Upload failed with status ${response.status}`);
+    }
+
+    const result = await response.json();
+    const storagePath = result.storage_path;
+
+    if (!storagePath) {
+      throw new Error('Edge Function did not return storage_path');
+    }
+
+    console.log('✅ Photo uploaded successfully via Edge Function:', storagePath);
+
+    // Create/update media record via RPC
+    const { data: mediaData, error: mediaError } = await supabase
+      .rpc('upsert_person_photo', {
+        p_person_id: personId,
+        p_storage_path: storagePath,
+        p_caption: caption || null,
+        p_taken_at: takenAt ? takenAt.toISOString().split('T')[0] : null,
+      });
+
+    if (mediaError) {
+      console.error('Error creating media record:', mediaError);
+      // Note: We can't delete the file from client (RLS), but Edge Function could handle cleanup
+      // For now, we'll just throw the error - the orphaned file can be cleaned up manually
+      throw mediaError;
+    }
+
+    if (!mediaData || mediaData.length === 0) {
+      throw new Error('Failed to create media record');
+    }
+
+    // Return the public URL (we'll need to get signed URL for private bucket)
+    const { data: urlData } = await supabase.storage
+      .from('family-tree-media')
+      .createSignedUrl(storagePath, 3600); // 1 hour expiry
+
+    return urlData?.signedUrl || null;
+  } catch (error) {
+    console.error('Error in uploadPersonPhoto:', error);
+    return null;
+  }
+};
+
+/**
+ * Get person photo URL
+ */
+export const getPersonPhotoUrl = async (personId: string): Promise<string | null> => {
+  try {
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) {
+      return null;
+    }
+
+    // Get storage path via RPC
+    const { data: storagePath, error: pathError } = await supabase
+      .rpc('get_person_photo_url', { p_person_id: personId });
+
+    if (pathError || !storagePath) {
+      return null;
+    }
+
+    // Create signed URL for private bucket
+    const { data: urlData, error: urlError } = await supabase.storage
+      .from('family-tree-media')
+      .createSignedUrl(storagePath, 3600); // 1 hour expiry
+
+    if (urlError || !urlData) {
+      return null;
+    }
+
+    return urlData.signedUrl;
+  } catch (error) {
+    console.error('Error in getPersonPhotoUrl:', error);
     return null;
   }
 };
