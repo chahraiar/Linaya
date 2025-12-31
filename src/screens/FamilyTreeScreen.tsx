@@ -1,11 +1,12 @@
 import React, { useEffect, useState, useRef } from 'react';
 import { View, StyleSheet, TouchableOpacity, TextInput, Modal, Pressable, Platform, Animated, PanResponder, Dimensions, GestureResponderEvent, Alert, ActivityIndicator } from 'react-native';
+import Svg, { Path, Circle } from 'react-native-svg';
 import { useNavigation } from '@react-navigation/native';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { useTranslation } from 'react-i18next';
 import { useTheme } from '../design-system/ThemeProvider';
 import { Screen, Text, Button, IconButton, Card, Spacer } from '../components/ui';
-import { useFamilyTreeStore } from '../store/familyTreeStore';
+import { useFamilyTreeStore, Person } from '../store/familyTreeStore';
 import { useSettingsStore } from '../store/settingsStore';
 import { createClusters } from '../features/familyTree/layout';
 import { Cluster } from '../features/familyTree/types';
@@ -76,6 +77,81 @@ export const FamilyTreeScreen: React.FC = () => {
     loadUserData();
   }, []);
 
+  // Clean person data: remove invalid relationship IDs
+  const cleanPersonData = (persons: Person[]): Person[] => {
+    // Create a map of valid person IDs
+    const validPersonIds = new Set(persons.map(p => p.id));
+    
+    // Clean each person's relationships
+    const cleanedPersons = persons.map(person => {
+      // Filter out invalid parent IDs
+      const validParentIds = person.parentIds.filter(id => validPersonIds.has(id));
+      
+      // Filter out invalid children IDs
+      const validChildrenIds = person.childrenIds.filter(id => validPersonIds.has(id));
+      
+      // Check if partner ID is valid
+      const validPartnerId = person.partnerId && validPersonIds.has(person.partnerId) 
+        ? person.partnerId 
+        : undefined;
+      
+      // Log if we removed any invalid IDs
+      if (person.parentIds.length !== validParentIds.length) {
+        const removed = person.parentIds.filter(id => !validPersonIds.has(id));
+        console.warn(`⚠️ Removed invalid parent IDs for ${person.firstName} ${person.lastName}:`, removed);
+      }
+      if (person.childrenIds.length !== validChildrenIds.length) {
+        const removed = person.childrenIds.filter(id => !validPersonIds.has(id));
+        console.warn(`⚠️ Removed invalid children IDs for ${person.firstName} ${person.lastName}:`, removed);
+      }
+      if (person.partnerId && !validPartnerId) {
+        console.warn(`⚠️ Removed invalid partner ID for ${person.firstName} ${person.lastName}:`, person.partnerId);
+      }
+      
+      return {
+        ...person,
+        parentIds: validParentIds,
+        childrenIds: validChildrenIds,
+        partnerId: validPartnerId,
+      };
+    });
+    
+    // Ensure bidirectional relationships are consistent
+    // If A has B as parent, then B should have A as child
+    const personMap = new Map(cleanedPersons.map(p => [p.id, p]));
+    
+    cleanedPersons.forEach(person => {
+      // Verify parent-child relationships are bidirectional
+      person.parentIds.forEach(parentId => {
+        const parent = personMap.get(parentId);
+        if (parent && !parent.childrenIds.includes(person.id)) {
+          console.warn(`⚠️ Adding missing child relationship: ${parent.firstName} ${parent.lastName} -> ${person.firstName} ${person.lastName}`);
+          parent.childrenIds.push(person.id);
+        }
+      });
+      
+      // Verify child-parent relationships are bidirectional
+      person.childrenIds.forEach(childId => {
+        const child = personMap.get(childId);
+        if (child && !child.parentIds.includes(person.id)) {
+          console.warn(`⚠️ Adding missing parent relationship: ${child.firstName} ${child.lastName} -> ${person.firstName} ${person.lastName}`);
+          child.parentIds.push(person.id);
+        }
+      });
+      
+      // Verify partner relationships are bidirectional
+      if (person.partnerId) {
+        const partner = personMap.get(person.partnerId);
+        if (partner && partner.partnerId !== person.id) {
+          console.warn(`⚠️ Fixing bidirectional partner relationship: ${person.firstName} ${person.lastName} <-> ${partner.firstName} ${partner.lastName}`);
+          partner.partnerId = person.id;
+        }
+      }
+    });
+    
+    return cleanedPersons;
+  };
+
   const loadUserData = async () => {
     try {
       setLoading(true);
@@ -119,7 +195,11 @@ export const FamilyTreeScreen: React.FC = () => {
         const { persons: treePersons } = await getTreeData(tree.id);
         console.log('👥 Persons loaded:', treePersons.length, 'person(s)');
         if (treePersons.length > 0) {
-          setPersons(treePersons);
+          // Clean person data to remove invalid relationship IDs
+          console.log('🧹 Cleaning person data...');
+          const cleanedPersons = cleanPersonData(treePersons);
+          console.log('✅ Person data cleaned');
+          setPersons(cleanedPersons);
         } else {
           setPersons([]);
         }
@@ -344,8 +424,20 @@ export const FamilyTreeScreen: React.FC = () => {
     const allPersons = Object.values(persons);
     console.log('Updating clusters, persons count:', allPersons.length);
     if (allPersons.length > 0) {
+      // Log persons with their relationships for debugging
+      allPersons.forEach((p) => {
+        const parentNames = p.parentIds.map(id => {
+          const parent = allPersons.find(pp => pp.id === id);
+          return parent ? `${parent.firstName} ${parent.lastName}` : id;
+        });
+        console.log(`Person: ${p.firstName} ${p.lastName} - Parents (${p.parentIds.length}): [${parentNames.join(', ')}], Children: ${p.childrenIds.length}, Partner: ${p.partnerId ? 'Yes' : 'No'}`);
+      });
       const newClusters = createClusters(allPersons);
       console.log('Clusters created:', newClusters.length, 'clusters with', newClusters.reduce((sum, c) => sum + c.nodes.length, 0), 'nodes');
+      // Log nodes in each cluster
+      newClusters.forEach((cluster, idx) => {
+        console.log(`Cluster ${idx}: ${cluster.nodes.length} nodes - ${cluster.nodes.map(n => `${n.person.firstName} ${n.person.lastName}`).join(', ')}`);
+      });
       setClusters(newClusters);
     } else {
       console.log('No persons to create clusters from');
@@ -618,6 +710,36 @@ export const FamilyTreeScreen: React.FC = () => {
     baseScale.current = newScale;
   };
 
+  // Handle zoom in button
+  const handleZoomIn = () => {
+    const currentScale = baseScale.current;
+    const newScale = Math.min(MAX_SCALE, currentScale + 0.2);
+    Animated.spring(scaleAnim, {
+      toValue: newScale,
+      useNativeDriver: false, // false car scale n'est pas une transformation native
+      tension: 50,
+      friction: 7,
+    }).start(() => {
+      baseScale.current = newScale;
+      setScale(newScale);
+    });
+  };
+
+  // Handle zoom out button
+  const handleZoomOut = () => {
+    const currentScale = baseScale.current;
+    const newScale = Math.max(MIN_SCALE, currentScale - 0.2);
+    Animated.spring(scaleAnim, {
+      toValue: newScale,
+      useNativeDriver: false, // false car scale n'est pas une transformation native
+      tension: 50,
+      friction: 7,
+    }).start(() => {
+      baseScale.current = newScale;
+      setScale(newScale);
+    });
+  };
+
   const handleNodePress = (personId: string) => {
     console.log('🚀 Navigating to PersonDetail for:', personId);
     try {
@@ -832,6 +954,37 @@ export const FamilyTreeScreen: React.FC = () => {
         onSubmit={handleAddPerson}
         loading={addingPerson}
       />
+
+          {/* Zoom Controls */}
+          <View style={styles.zoomControlsContainer}>
+            <View style={styles.zoomControls}>
+              <TouchableOpacity
+                onPress={handleZoomIn}
+                activeOpacity={0.6}
+                style={styles.zoomButton}
+              >
+                <View style={styles.zoomButtonCircle}>
+                  <Svg width={18} height={18} viewBox="0 0 24 24" fill="none" stroke="#FFFFFF" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
+                    <Circle cx="12" cy="12" r="10" />
+                    <Path d="M12 8v8M8 12h8" />
+                  </Svg>
+                </View>
+              </TouchableOpacity>
+              <View style={styles.zoomDivider} />
+              <TouchableOpacity
+                onPress={handleZoomOut}
+                activeOpacity={0.6}
+                style={styles.zoomButton}
+              >
+                <View style={styles.zoomButtonCircle}>
+                  <Svg width={18} height={18} viewBox="0 0 24 24" fill="none" stroke="#FFFFFF" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
+                    <Circle cx="12" cy="12" r="10" />
+                    <Path d="M8 12h8" />
+                  </Svg>
+                </View>
+              </TouchableOpacity>
+            </View>
+          </View>
         </>
       )}
     </Screen>
@@ -910,6 +1063,49 @@ const styles = StyleSheet.create({
     flex: 1,
     fontSize: 16,
   },
+  zoomControlsContainer: {
+    position: 'absolute',
+    right: 20,
+    top: 100,
+    zIndex: 1000,
+  },
+  zoomControls: {
+    paddingVertical: 8,
+    paddingHorizontal: 6,
+    borderRadius: 20,
+    flexDirection: 'column',
+    alignItems: 'center',
+    justifyContent: 'center',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.2,
+    shadowRadius: 12,
+    elevation: 8,
+    minWidth: 44,
+    backgroundColor: 'rgba(0, 0, 0, 0.4)', // Fond sombre semi-transparent
+  },
+  zoomButton: {
+    width: 36,
+    height: 36,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  zoomButtonCircle: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    backgroundColor: 'rgba(255, 255, 255, 0.15)',
+    borderWidth: 1.5,
+    borderColor: 'rgba(255, 255, 255, 0.2)',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  zoomDivider: {
+    width: '60%',
+    height: 1,
+    backgroundColor: 'rgba(255, 255, 255, 0.25)',
+    marginVertical: 4,
+  },
   addButton: {
     width: 56,
     height: 56,
@@ -938,4 +1134,3 @@ const styles = StyleSheet.create({
     marginBottom: 100,
   },
 });
-

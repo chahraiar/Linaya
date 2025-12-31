@@ -30,6 +30,7 @@ import {
   deletePerson,
 } from '../services/treeService';
 import { AddRelativeModal } from '../components/AddRelativeModal';
+import { LinkExistingPersonModal } from '../components/LinkExistingPersonModal';
 import { supabase } from '../lib/supabase';
 
 type PersonDetailRouteProp = RouteProp<RootStackParamList, 'PersonDetail'>;
@@ -1068,6 +1069,9 @@ const RelativesTab: React.FC<{ person: any }> = ({ person }) => {
   const [showAddParentModal, setShowAddParentModal] = useState(false);
   const [showAddChildModal, setShowAddChildModal] = useState(false);
   const [showAddPartnerModal, setShowAddPartnerModal] = useState(false);
+  const [showLinkParentModal, setShowLinkParentModal] = useState(false);
+  const [showLinkChildModal, setShowLinkChildModal] = useState(false);
+  const [showLinkPartnerModal, setShowLinkPartnerModal] = useState(false);
 
   const parents = person.parentIds.map((id: string) => getPerson(id)).filter(Boolean);
   const partner = person.partnerId ? getPerson(person.partnerId) : null;
@@ -1184,22 +1188,40 @@ const RelativesTab: React.FC<{ person: any }> = ({ person }) => {
       {/* Add buttons */}
       <View style={styles.addButtonsContainer}>
         {parents.length < 2 && (
-          <Button
-            variant="secondary"
-            onPress={() => setShowAddParentModal(true)}
-            style={styles.addButton}
-          >
-            {`+ ${t('person.addParent')}`}
-          </Button>
+          <>
+            <Button
+              variant="secondary"
+              onPress={() => setShowAddParentModal(true)}
+              style={styles.addButton}
+            >
+              {`+ ${t('person.addParent')}`}
+            </Button>
+            <Button
+              variant="ghost"
+              onPress={() => setShowLinkParentModal(true)}
+              style={styles.addButton}
+            >
+              {`🔗 Lier un parent existant`}
+            </Button>
+          </>
         )}
         {!partner && (
-          <Button
-            variant="secondary"
-            onPress={() => setShowAddPartnerModal(true)}
-            style={styles.addButton}
-          >
-            {`+ ${t('person.addPartner') || 'Ajouter un conjoint'}`}
-          </Button>
+          <>
+            <Button
+              variant="secondary"
+              onPress={() => setShowAddPartnerModal(true)}
+              style={styles.addButton}
+            >
+              {`+ ${t('person.addPartner') || 'Ajouter un conjoint'}`}
+            </Button>
+            <Button
+              variant="ghost"
+              onPress={() => setShowLinkPartnerModal(true)}
+              style={styles.addButton}
+            >
+              {`🔗 Lier un conjoint existant`}
+            </Button>
+          </>
         )}
         <Button
           variant="secondary"
@@ -1207,6 +1229,13 @@ const RelativesTab: React.FC<{ person: any }> = ({ person }) => {
           style={styles.addButton}
         >
           {`+ ${t('person.addChild')}`}
+        </Button>
+        <Button
+          variant="ghost"
+          onPress={() => setShowLinkChildModal(true)}
+          style={styles.addButton}
+        >
+          {`🔗 Lier un enfant existant`}
         </Button>
       </View>
 
@@ -1231,6 +1260,29 @@ const RelativesTab: React.FC<{ person: any }> = ({ person }) => {
         personId={person.id}
         relationshipType="partner"
         onPersonAdded={handleReloadData}
+      />
+      
+      {/* Link existing person modals */}
+      <LinkExistingPersonModal
+        visible={showLinkParentModal}
+        onClose={() => setShowLinkParentModal(false)}
+        personId={person.id}
+        relationshipType="parent"
+        onRelationshipCreated={handleReloadData}
+      />
+      <LinkExistingPersonModal
+        visible={showLinkChildModal}
+        onClose={() => setShowLinkChildModal(false)}
+        personId={person.id}
+        relationshipType="child"
+        onRelationshipCreated={handleReloadData}
+      />
+      <LinkExistingPersonModal
+        visible={showLinkPartnerModal}
+        onClose={() => setShowLinkPartnerModal(false)}
+        personId={person.id}
+        relationshipType="partner"
+        onRelationshipCreated={handleReloadData}
       />
     </View>
   );
