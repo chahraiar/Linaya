@@ -1,6 +1,9 @@
 import { Person } from '../../store/familyTreeStore';
 import { TreeNode, Cluster, Position } from './types';
 
+// Ré-exporter les types pour compatibilité
+export type { Cluster, TreeNode, Position };
+
 /**
  * Simple hierarchical layout algorithm
  * Groups persons by clusters and arranges them in a tree structure
@@ -77,6 +80,7 @@ function findDescendants(personId: string, persons: Person[]): Set<string> {
 
   return descendants;
 }
+
 
 /**
  * Group persons into clusters based on family relationships
@@ -178,10 +182,12 @@ export function createClusters(persons: Person[]): Cluster[] {
     console.log(`Creating cluster from root: ${bestRoot.firstName} ${bestRoot.lastName}, clusterPersons: ${clusterPersons.map(p => `${p.firstName} ${p.lastName}`).join(', ')}`);
     
     // Create tree nodes for this cluster
+    // Note: ELK ne fonctionne pas dans React Native (nécessite web-worker)
+    // On utilise donc l'algorithme amélioré avec layout intelligent
     const nodes = layoutTree(clusterPersons, bestRoot.id, { x: 0, y: 0 }, clusterId);
     
     console.log(`Cluster created with ${nodes.length} nodes: ${nodes.map(n => `${n.person.firstName} ${n.person.lastName}`).join(', ')}`);
-    
+
     // Remove duplicates based on person.id (safety check)
     const uniqueNodes = new Map<string, typeof nodes[0]>();
     nodes.forEach(node => {

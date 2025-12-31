@@ -45,13 +45,16 @@ export const TreeRenderer: React.FC<TreeRendererProps> = ({
     if (isNaN(y) || !isFinite(y)) return centerY;
     return centerY + y;
   };
-  // Render links between nodes
+  // Render links between nodes with simple bus bundling (back to basics for reliability)
   const renderLinks = () => {
     const links: JSX.Element[] = [];
-    const processedLinks = new Set<string>(); // Track processed links to avoid duplicates
+    const processedLinks = new Set<string>();
+    
     clusters.forEach((cluster) => {
       const nodeById = new Map(cluster.nodes.map((node) => [node.person.id, node]));
       const parentGroups = new Map<string, { parents: TreeNode[]; children: TreeNode[] }>();
+      
+      // Group children by their parents
       cluster.nodes.forEach((node) => {
         const parentNodes = node.person.parentIds
           .map((parentId) => nodeById.get(parentId))
@@ -65,6 +68,8 @@ export const TreeRenderer: React.FC<TreeRendererProps> = ({
           parentGroups.set(parentKey, { parents: parentNodes, children: [node] });
         }
       });
+      
+      // Render parent->children relationships with bus bundling
       parentGroups.forEach((group, groupKey) => {
         const parentXs = group.parents.map((parent) => transformX(parent.position.x));
         const parentBottomYs = group.parents.map(
@@ -74,6 +79,7 @@ export const TreeRenderer: React.FC<TreeRendererProps> = ({
         const childTopYs = group.children.map(
           (child) => transformY(child.position.y) - CARD_HEIGHT / 2
         );
+        
         const minParentX = Math.min(...parentXs);
         const maxParentX = Math.max(...parentXs);
         const minChildX = Math.min(...childXs);
@@ -81,6 +87,8 @@ export const TreeRenderer: React.FC<TreeRendererProps> = ({
         const barStartX = Math.min(minParentX, minChildX);
         const barEndX = Math.max(maxParentX, maxChildX);
         const barY = Math.max(...parentBottomYs) + LINK_PARENT_BAR_GAP;
+        
+        // Parent trunks: vertical lines from each parent to bus
         group.parents.forEach((parent, index) => {
           const parentX = parentXs[index];
           const parentBottomY = parentBottomYs[index];
@@ -95,10 +103,11 @@ export const TreeRenderer: React.FC<TreeRendererProps> = ({
               strokeWidth={LINK_STROKE_WIDTH}
               strokeOpacity={0.8}
               strokeLinecap="round"
-              strokeDasharray="0"
             />
           );
         });
+        
+        // Bus bar: horizontal line
         if (Math.abs(barEndX - barStartX) > 1) {
           links.push(
             <Line
@@ -111,10 +120,11 @@ export const TreeRenderer: React.FC<TreeRendererProps> = ({
               strokeWidth={LINK_STROKE_WIDTH}
               strokeOpacity={0.8}
               strokeLinecap="round"
-              strokeDasharray="0"
             />
           );
         }
+        
+        // Child branches: vertical lines from bus to each child
         group.children.forEach((child, index) => {
           const childX = childXs[index];
           const childTopY = childTopYs[index];
@@ -129,16 +139,17 @@ export const TreeRenderer: React.FC<TreeRendererProps> = ({
               strokeWidth={LINK_STROKE_WIDTH}
               strokeOpacity={0.8}
               strokeLinecap="round"
-              strokeDasharray="0"
             />
           );
         });
       });
+      
+      // Partner links (horizontal between partners)
       cluster.nodes.forEach((node) => {
         const person = node.person;
         const nodeX = transformX(node.position.x);
         const nodeY = transformY(node.position.y);
-        // Link to partner - horizontal line between partners
+        
         if (person.partnerId) {
           const partnerLinkKey = [node.person.id, person.partnerId].sort().join('-');
           if (!processedLinks.has(`partner-${partnerLinkKey}`)) {
@@ -147,9 +158,9 @@ export const TreeRenderer: React.FC<TreeRendererProps> = ({
             if (partnerNode) {
               const partnerX = transformX(partnerNode.position.x);
               const partnerY = transformY(partnerNode.position.y);
+              
               // Only draw if partners are on the same level (within 10px)
               if (Math.abs(nodeY - partnerY) < 10) {
-                // Connect at the middle height of the cards for better visual connection
                 const cardCenterY = nodeY;
                 links.push(
                   <Line
@@ -170,6 +181,7 @@ export const TreeRenderer: React.FC<TreeRendererProps> = ({
         }
       });
     });
+    
     return links;
   };
   if (clusters.length === 0 || clusters.reduce((sum, c) => sum + c.nodes.length, 0) === 0) {

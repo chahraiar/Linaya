@@ -42,6 +42,8 @@ export const FamilyTreeScreen: React.FC = () => {
     if (allPersons.length > 0) {
       const newClusters = createClusters(allPersons);
       setClusters(newClusters);
+    } else {
+      setClusters([]);
     }
   }, [persons]);
 
