@@ -85,8 +85,12 @@ function findDescendants(personId: string, persons: Person[]): Set<string> {
 /**
  * Group persons into clusters based on family relationships
  * Fixed to handle persons with multiple parents correctly
+ * @param customPositions Optional custom positions to override layout positions
  */
-export function createClusters(persons: Person[]): Cluster[] {
+export function createClusters(
+  persons: Person[],
+  customPositions?: Record<string, { x: number; y: number }>
+): Cluster[] {
   const clusters: Cluster[] = [];
   const processed = new Set<string>();
   

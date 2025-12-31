@@ -1,10 +1,185 @@
-import React from 'react';
-import { View, StyleSheet, Dimensions, Text, TouchableOpacity } from 'react-native';
+import React, { useRef, useMemo, useCallback } from 'react';
+import { View, StyleSheet, Dimensions, Text, TouchableOpacity, PanResponder, Animated } from 'react-native';
 import Svg, { Line } from 'react-native-svg';
 import { useTheme } from '../../design-system/ThemeProvider';
 import { Cluster, TreeNode } from './types';
 import { PersonCard, CARD_WIDTH, CARD_HEIGHT } from './PersonCard';
 import { useFamilyTreeStore } from '../../store/familyTreeStore';
+
+// Component for draggable card - separate component to allow proper hooks usage
+const DraggableCard: React.FC<{
+  node: TreeNode;
+  x: number;
+  y: number;
+  isSelected: boolean;
+  isEditMode: boolean;
+  scale: number;
+  onNodePress: (personId: string) => void;
+  onPositionChange?: (personId: string, x: number, y: number) => void;
+  treeId?: string;
+  draggingNodeId: React.MutableRefObject<string | null>;
+  dragStartPosition: React.MutableRefObject<{ x: number; y: number } | null>;
+  customPositions: Record<string, { x: number; y: number }>;
+  updateCustomPosition: (personId: string, x: number, y: number) => void;
+}> = ({
+  node,
+  x,
+  y,
+  isSelected,
+  isEditMode,
+  scale,
+  onNodePress,
+  onPositionChange,
+  treeId,
+  draggingNodeId,
+  dragStartPosition,
+  customPositions,
+  updateCustomPosition,
+}) => {
+  // ⚠️ LOG DE RENDER - doit apparaître à chaque re-render
+  console.log('🔄 DraggableCard RENDER for:', node.person.id, 'isEditMode:', isEditMode);
+  
+  const baseX = customPositions[node.person.id]?.x ?? node.position.x;
+  const baseY = customPositions[node.person.id]?.y ?? node.position.y;
+  const basePositionRef = useRef({ x: baseX, y: baseY });
+  const dragOffset = useRef(new Animated.ValueXY({ x: 0, y: 0 })).current;
+  const dragOffsetRef = useRef({ x: 0, y: 0 });
+  const isDraggingRef = useRef(false);
+  
+  // Force re-render when isEditMode changes
+  React.useEffect(() => {
+    console.log('🔄 DraggableCard effect - isEditMode:', isEditMode, 'for node:', node.person.id);
+  }, [isEditMode, node.person.id]);
+
+  React.useEffect(() => {
+    if (!isDraggingRef.current) {
+      basePositionRef.current = { x: baseX, y: baseY };
+    }
+  }, [baseX, baseY]);
+  
+  const panResponder = useMemo(() => {
+    console.log('🔧 useMemo called for:', node.person.id, 'isEditMode:', isEditMode);
+    if (!isEditMode) {
+      return null;
+    }
+    console.log('✅ Creating PanResponder for node:', node.person.id);
+    
+    return PanResponder.create({
+      onStartShouldSetPanResponder: () => {
+        console.log('🎯 onStartShouldSetPanResponder - returning true for:', node.person.id);
+        return true;
+      },
+      onStartShouldSetPanResponderCapture: () => {
+        console.log('🎯 onStartShouldSetPanResponderCapture - returning true for:', node.person.id);
+        return true;
+      },
+      onMoveShouldSetPanResponder: (evt, gestureState) => {
+        const shouldMove = Math.abs(gestureState.dx) > 2 || Math.abs(gestureState.dy) > 2;
+        if (shouldMove) {
+          console.log('🎯 onMoveShouldSetPanResponder - returning true for:', node.person.id, 'dx:', gestureState.dx, 'dy:', gestureState.dy);
+        }
+        return shouldMove;
+      },
+      onPanResponderGrant: () => {
+        draggingNodeId.current = node.person.id;
+        dragStartPosition.current = { ...basePositionRef.current };
+        isDraggingRef.current = true;
+        dragOffset.setValue({ x: 0, y: 0 });
+        dragOffsetRef.current = { x: 0, y: 0 };
+        console.log('🎯 Drag GRANTED for:', node.person.id, 'at position:', basePositionRef.current.x, basePositionRef.current.y);
+      },
+      onPanResponderMove: (evt, gestureState) => {
+        if (draggingNodeId.current === node.person.id && dragStartPosition.current) {
+          const dx = gestureState.dx / scale;
+          const dy = gestureState.dy / scale;
+          dragOffset.setValue({ x: dx, y: dy });
+          dragOffsetRef.current = { x: dx, y: dy };
+          console.log('🎯 Drag MOVE:', node.person.id, 'dx:', gestureState.dx, 'dy:', gestureState.dy, 'offset:', dx, dy);
+        }
+      },
+      onPanResponderRelease: () => {
+        console.log('🎯 Drag RELEASED for:', node.person.id);
+        if (draggingNodeId.current === node.person.id) {
+          const finalX = basePositionRef.current.x + dragOffsetRef.current.x;
+          const finalY = basePositionRef.current.y + dragOffsetRef.current.y;
+          updateCustomPosition(node.person.id, finalX, finalY);
+          if (treeId && onPositionChange) {
+            console.log('💾 Saving position for:', node.person.id, { x: finalX, y: finalY });
+            onPositionChange(node.person.id, finalX, finalY);
+          }
+        }
+        dragOffset.setValue({ x: 0, y: 0 });
+        dragOffsetRef.current = { x: 0, y: 0 };
+        isDraggingRef.current = false;
+        draggingNodeId.current = null;
+        dragStartPosition.current = null;
+      },
+      onPanResponderTerminate: () => {
+        console.log('🎯 Drag TERMINATED for:', node.person.id);
+        dragOffset.setValue({ x: 0, y: 0 });
+        dragOffsetRef.current = { x: 0, y: 0 };
+        isDraggingRef.current = false;
+        draggingNodeId.current = null;
+        dragStartPosition.current = null;
+      },
+    });
+  }, [isEditMode, node.person.id, scale, treeId, onPositionChange, updateCustomPosition, dragOffset]);
+  
+  const cardStyle = [
+    styles.cardContainer,
+    {
+      left: x - CARD_WIDTH / 2 - 1000, // VIRTUAL_WIDTH / 2
+      top: y - CARD_HEIGHT / 2 - 1000, // VIRTUAL_HEIGHT / 2
+      zIndex: isEditMode && draggingNodeId.current === node.person.id ? 200 : 100,
+      opacity: isEditMode && draggingNodeId.current === node.person.id ? 0.8 : 1,
+    },
+  ];
+  
+  // Debug: log render decision
+  console.log('🎨 DraggableCard render decision for:', node.person.id, {
+    isEditMode,
+    hasPanResponder: !!panResponder,
+    willRenderView: isEditMode && panResponder,
+  });
+  
+  // In edit mode with PanResponder, use View with PanResponder
+  if (isEditMode && panResponder) {
+    console.log('✅ Rendering draggable View for:', node.person.id);
+    return (
+      <Animated.View
+        style={[...cardStyle, { transform: dragOffset.getTranslateTransform() }]}
+        {...panResponder.panHandlers}
+      >
+        <PersonCard
+          person={node.person}
+          onPress={() => {}}
+          isSelected={isSelected}
+          disableTouch={true}
+        />
+      </Animated.View>
+    );
+  }
+  
+  // Normal mode: use TouchableOpacity
+  console.log('📌 Rendering TouchableOpacity for:', node.person.id, 'isEditMode:', isEditMode, 'panResponder:', !!panResponder);
+  return (
+    <TouchableOpacity
+      style={cardStyle}
+      activeOpacity={0.9}
+      onPress={() => {
+        if (!isEditMode) {
+          onNodePress(node.person.id);
+        }
+      }}
+    >
+      <PersonCard
+        person={node.person}
+        onPress={() => {}}
+        isSelected={isSelected}
+      />
+    </TouchableOpacity>
+  );
+};
 const { width: SCREEN_WIDTH, height: SCREEN_HEIGHT } = Dimensions.get('window');
 interface TreeRendererProps {
   clusters: Cluster[];
@@ -12,8 +187,10 @@ interface TreeRendererProps {
   translateX: number;
   translateY: number;
   onNodePress: (personId: string) => void;
+  onNodePositionChange?: (personId: string, x: number, y: number) => void;
   renderLinksOnly?: boolean;
   renderCardsOnly?: boolean;
+  treeId?: string;
 }
 const LINK_STROKE_WIDTH = 2.5;
 const LINK_COLOR = '#888888'; // Gris plus foncé pour meilleure visibilité
@@ -24,11 +201,20 @@ export const TreeRenderer: React.FC<TreeRendererProps> = ({
   translateX,
   translateY,
   onNodePress,
+  onNodePositionChange,
   renderLinksOnly = false,
   renderCardsOnly = false,
+  treeId,
 }) => {
   const { theme } = useTheme();
-  const { selectedPersonId } = useFamilyTreeStore();
+  const { selectedPersonId, isEditMode, customPositions, updateCustomPosition } = useFamilyTreeStore();
+  const draggingNodeId = useRef<string | null>(null);
+  const dragStartPosition = useRef<{ x: number; y: number } | null>(null);
+  
+  // Debug: log edit mode changes
+  React.useEffect(() => {
+    console.log('🔧 TreeRenderer - isEditMode changed to:', isEditMode);
+  }, [isEditMode]);
   // Use a large coordinate space for both SVG and cards
   // The parent Animated.View will apply zoom/pan transformations
   // So we work in a virtual coordinate space where (0,0) is the center
@@ -44,6 +230,13 @@ export const TreeRenderer: React.FC<TreeRendererProps> = ({
   const transformY = (y: number) => {
     if (isNaN(y) || !isFinite(y)) return centerY;
     return centerY + y;
+  };
+  const getNodeBasePosition = (node: TreeNode) => {
+    const customPos = customPositions[node.person.id];
+    return {
+      x: customPos ? customPos.x : node.position.x,
+      y: customPos ? customPos.y : node.position.y,
+    };
   };
   // Render links between nodes with simple bus bundling (back to basics for reliability)
   const renderLinks = () => {
@@ -71,13 +264,13 @@ export const TreeRenderer: React.FC<TreeRendererProps> = ({
       
       // Render parent->children relationships with bus bundling
       parentGroups.forEach((group, groupKey) => {
-        const parentXs = group.parents.map((parent) => transformX(parent.position.x));
+        const parentXs = group.parents.map((parent) => transformX(getNodeBasePosition(parent).x));
         const parentBottomYs = group.parents.map(
-          (parent) => transformY(parent.position.y) + CARD_HEIGHT / 2
+          (parent) => transformY(getNodeBasePosition(parent).y) + CARD_HEIGHT / 2
         );
-        const childXs = group.children.map((child) => transformX(child.position.x));
+        const childXs = group.children.map((child) => transformX(getNodeBasePosition(child).x));
         const childTopYs = group.children.map(
-          (child) => transformY(child.position.y) - CARD_HEIGHT / 2
+          (child) => transformY(getNodeBasePosition(child).y) - CARD_HEIGHT / 2
         );
         
         const minParentX = Math.min(...parentXs);
@@ -147,8 +340,9 @@ export const TreeRenderer: React.FC<TreeRendererProps> = ({
       // Partner links (horizontal between partners)
       cluster.nodes.forEach((node) => {
         const person = node.person;
-        const nodeX = transformX(node.position.x);
-        const nodeY = transformY(node.position.y);
+        const nodeBase = getNodeBasePosition(node);
+        const nodeX = transformX(nodeBase.x);
+        const nodeY = transformY(nodeBase.y);
         
         if (person.partnerId) {
           const partnerLinkKey = [node.person.id, person.partnerId].sort().join('-');
@@ -156,8 +350,9 @@ export const TreeRenderer: React.FC<TreeRendererProps> = ({
             processedLinks.add(`partner-${partnerLinkKey}`);
             const partnerNode = cluster.nodes.find((n) => n.person.id === person.partnerId);
             if (partnerNode) {
-              const partnerX = transformX(partnerNode.position.x);
-              const partnerY = transformY(partnerNode.position.y);
+              const partnerBase = getNodeBasePosition(partnerNode);
+              const partnerX = transformX(partnerBase.x);
+              const partnerY = transformY(partnerBase.y);
               
               // Only draw if partners are on the same level (within 10px)
               if (Math.abs(nodeY - partnerY) < 10) {
@@ -219,30 +414,35 @@ export const TreeRenderer: React.FC<TreeRendererProps> = ({
       <View style={styles.container} pointerEvents="box-none">
         {clusters.map((cluster, clusterIndex) =>
           cluster.nodes.map((node) => {
-            const x = transformX(node.position.x);
-            const y = transformY(node.position.y);
+            // Use custom position if available, otherwise use layout position
+            const customPos = customPositions[node.person.id];
+            const baseX = customPos ? customPos.x : node.position.x;
+            const baseY = customPos ? customPos.y : node.position.y;
+
+            const x = transformX(baseX);
+            const y = transformY(baseY);
             const isSelected = selectedPersonId === node.person.id;
             if (isNaN(x) || isNaN(y) || !isFinite(x) || !isFinite(y)) {
               console.warn(`Invalid coordinates for node ${node.person.id}: x=${x}, y=${y}`);
               return null;
             }
             return (
-              <View
-                key={`card-${clusterIndex}-${node.person.id}`}
-                style={[
-                  styles.cardContainer,
-                  {
-                    left: x - CARD_WIDTH / 2 - VIRTUAL_WIDTH / 2,
-                    top: y - CARD_HEIGHT / 2 - VIRTUAL_HEIGHT / 2,
-                  },
-                ]}
-              >
-                <PersonCard
-                  person={node.person}
-                  onPress={onNodePress}
-                  isSelected={isSelected}
-                />
-              </View>
+              <DraggableCard
+                key={`card-${clusterIndex}-${node.person.id}-${isEditMode ? 'edit' : 'view'}`}
+                node={node}
+                x={x}
+                y={y}
+                isSelected={isSelected}
+                isEditMode={isEditMode}
+                scale={scale}
+                onNodePress={onNodePress}
+                onPositionChange={onNodePositionChange}
+                treeId={treeId}
+                draggingNodeId={draggingNodeId}
+                dragStartPosition={dragStartPosition}
+                customPositions={customPositions}
+                updateCustomPosition={updateCustomPosition}
+              />
             );
           })
         )}
@@ -272,36 +472,37 @@ export const TreeRenderer: React.FC<TreeRendererProps> = ({
       {/* Person cards */}
       {clusters.map((cluster, clusterIndex) =>
         cluster.nodes.map((node) => {
-          const x = transformX(node.position.x);
-          const y = transformY(node.position.y);
+          // Use custom position if available, otherwise use layout position
+          const customPos = customPositions[node.person.id];
+          const baseX = customPos ? customPos.x : node.position.x;
+          const baseY = customPos ? customPos.y : node.position.y;
+          
+          const x = transformX(baseX);
+          const y = transformY(baseY);
           const isSelected = selectedPersonId === node.person.id;
+          
           if (isNaN(x) || isNaN(y) || !isFinite(x) || !isFinite(y)) {
             console.warn(`Invalid coordinates for node ${node.person.id}: x=${x}, y=${y}`);
             return null;
           }
+          
           return (
-            <TouchableOpacity
-              key={`card-${clusterIndex}-${node.person.id}`}
-              style={[
-                styles.cardContainer,
-                {
-                  left: x - CARD_WIDTH / 2 - VIRTUAL_WIDTH / 2,
-                  top: y - CARD_HEIGHT / 2 - VIRTUAL_HEIGHT / 2,
-                  zIndex: 100,
-                },
-              ]}
-              activeOpacity={0.9}
-              onPress={(e) => {
-                console.log('🎯 Card TouchableOpacity pressed:', node.person.id);
-                onNodePress(node.person.id);
-              }}
-            >
-              <PersonCard
-                person={node.person}
-                onPress={() => {}}
-                isSelected={isSelected}
-              />
-            </TouchableOpacity>
+            <DraggableCard
+              key={`card-${clusterIndex}-${node.person.id}-${isEditMode ? 'edit' : 'view'}`}
+              node={node}
+              x={x}
+              y={y}
+              isSelected={isSelected}
+              isEditMode={isEditMode}
+              scale={scale}
+              onNodePress={onNodePress}
+              onPositionChange={onNodePositionChange}
+              treeId={treeId}
+              draggingNodeId={draggingNodeId}
+              dragStartPosition={dragStartPosition}
+              customPositions={customPositions}
+              updateCustomPosition={updateCustomPosition}
+            />
           );
         })
       )}

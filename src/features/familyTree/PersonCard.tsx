@@ -9,6 +9,7 @@ interface PersonCardProps {
   person: Person;
   onPress: (personId: string) => void;
   isSelected?: boolean;
+  disableTouch?: boolean; // Disable TouchableOpacity for drag operations
 }
 
 const AVATAR_SIZE = 60;
@@ -27,6 +28,7 @@ export const PersonCard: React.FC<PersonCardProps> = ({
   person,
   onPress,
   isSelected = false,
+  disableTouch = false,
 }) => {
   const { theme } = useTheme();
   const [photoUrl, setPhotoUrl] = useState<string | null>(null);
@@ -57,35 +59,8 @@ export const PersonCard: React.FC<PersonCardProps> = ({
     ? `${person.birthYear}${person.deathYear ? `-${person.deathYear}` : '-'}`
     : '';
 
-  return (
-    <TouchableOpacity
-      onPress={() => {
-        console.log('🎯 PersonCard pressed:', person.id, person.firstName, person.lastName);
-        onPress(person.id);
-      }}
-      onPressIn={() => {
-        console.log('👆 Card TouchableOpacity press IN:', person.firstName, person.lastName);
-      }}
-      onPressOut={() => {
-        console.log('👋 Card TouchableOpacity press OUT:', person.firstName, person.lastName);
-      }}
-      activeOpacity={0.7}
-      style={[
-        styles.card,
-        {
-          backgroundColor: '#FFFFFF',
-          borderRadius: 16,
-          shadowColor: '#000',
-          shadowOffset: { width: 0, height: 3 },
-          shadowOpacity: isSelected ? 0.2 : 0.1,
-          shadowRadius: isSelected ? 10 : 8,
-          elevation: isSelected ? 6 : 3,
-          borderWidth: isSelected ? 2.5 : 0,
-          borderColor: isSelected ? theme.colors.primary : 'transparent',
-          transform: [{ scale: isSelected ? 1.03 : 1 }],
-        },
-      ]}
-    >
+  const cardContent = (
+    <>
       {/* Avatar */}
       <View style={styles.avatarContainer}>
         {photoUrl ? (
@@ -129,6 +104,46 @@ export const PersonCard: React.FC<PersonCardProps> = ({
           {dates}
         </Text>
       )}
+    </>
+  );
+
+  const cardStyle = [
+    styles.card,
+    {
+      backgroundColor: '#FFFFFF',
+      borderRadius: 16,
+      shadowColor: '#000',
+      shadowOffset: { width: 0, height: 3 },
+      shadowOpacity: isSelected ? 0.2 : 0.1,
+      shadowRadius: isSelected ? 10 : 8,
+      elevation: isSelected ? 6 : 3,
+      borderWidth: isSelected ? 2.5 : 0,
+      borderColor: isSelected ? theme.colors.primary : 'transparent',
+      transform: [{ scale: isSelected ? 1.03 : 1 }],
+    },
+  ];
+
+  // If disableTouch is true, render as View instead of TouchableOpacity (for drag operations)
+  if (disableTouch) {
+    return <View style={cardStyle}>{cardContent}</View>;
+  }
+
+  return (
+    <TouchableOpacity
+      activeOpacity={0.7}
+      style={cardStyle}
+      onPress={() => {
+        console.log('🎯 PersonCard pressed:', person.id, person.firstName, person.lastName);
+        onPress(person.id);
+      }}
+      onPressIn={() => {
+        console.log('👆 Card TouchableOpacity press IN:', person.firstName, person.lastName);
+      }}
+      onPressOut={() => {
+        console.log('👋 Card TouchableOpacity press OUT:', person.firstName, person.lastName);
+      }}
+    >
+      {cardContent}
     </TouchableOpacity>
   );
 };

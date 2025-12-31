@@ -20,7 +20,9 @@ import {
   createPersonFromProfile,
   createPerson,
   Profile,
-  Tree 
+  Tree,
+  getPersonPositions,
+  savePersonPosition,
 } from '../services/treeService';
 import { AddPersonModal } from '../components/AddPersonModal';
 import { supabase } from '../lib/supabase';
@@ -36,7 +38,18 @@ export const FamilyTreeScreen: React.FC = () => {
   const { t } = useTranslation();
   const { theme } = useTheme();
   const navigation = useNavigation<NavigationProp>();
-  const { persons, setPersons, getPerson, selectedPersonId, addPerson } = useFamilyTreeStore();
+  const { 
+    persons, 
+    setPersons, 
+    getPerson, 
+    selectedPersonId, 
+    addPerson,
+    customPositions,
+    setCustomPositions,
+    updateCustomPosition,
+    isEditMode,
+    setEditMode,
+  } = useFamilyTreeStore();
   const [clusters, setClusters] = useState<Cluster[]>([]);
   const [searchQuery, setSearchQuery] = useState('');
   const [showAddMenu, setShowAddMenu] = useState(false);
@@ -200,6 +213,15 @@ export const FamilyTreeScreen: React.FC = () => {
           const cleanedPersons = cleanPersonData(treePersons);
           console.log('✅ Person data cleaned');
           setPersons(cleanedPersons);
+          
+          // Load custom positions
+          try {
+            const positions = await getPersonPositions(tree.id);
+            setCustomPositions(positions);
+            console.log(`✅ Loaded ${positions.length} custom positions`);
+          } catch (error) {
+            console.error('Error loading custom positions:', error);
+          }
         } else {
           setPersons([]);
         }
@@ -833,11 +855,14 @@ export const FamilyTreeScreen: React.FC = () => {
           {/* Tree Canvas with zoom and pan */}
           <View style={styles.canvasContainer}>
         {/* Layer 1: Background PanResponder - ONLY for gestures, invisible */}
-        <View
-          style={StyleSheet.absoluteFill}
-          {...panResponder.panHandlers}
-          collapsable={false}
-        />
+        {/* Disable pan/zoom when in edit mode to allow card dragging */}
+        {!isEditMode && (
+          <View
+            style={StyleSheet.absoluteFill}
+            {...panResponder.panHandlers}
+            collapsable={false}
+          />
+        )}
         
         {/* Layer 2: Animated SVG layer (links) - no touch events */}
         <Animated.View
@@ -856,7 +881,7 @@ export const FamilyTreeScreen: React.FC = () => {
           {clusters.length > 0 ? (
             <TreeRenderer
               clusters={clusters}
-              scale={1}
+              scale={scale}
               translateX={0}
               translateY={0}
               onNodePress={handleNodePress}
@@ -882,11 +907,21 @@ export const FamilyTreeScreen: React.FC = () => {
           {clusters.length > 0 && (
             <TreeRenderer
               clusters={clusters}
-              scale={1}
-              translateX={0}
-              translateY={0}
+              scale={scale}
+              translateX={translateX}
+              translateY={translateY}
               onNodePress={handleNodePress}
+              onNodePositionChange={async (personId, x, y) => {
+                if (currentTree) {
+                  try {
+                    await savePersonPosition(currentTree.id, personId, x, y);
+                  } catch (error) {
+                    console.error('Error saving position:', error);
+                  }
+                }
+              }}
               renderCardsOnly={true}
+              treeId={currentTree?.id}
             />
           )}
         </Animated.View>
@@ -906,6 +941,27 @@ export const FamilyTreeScreen: React.FC = () => {
             onChangeText={setSearchQuery}
           />
         </View>
+
+        {/* Edit mode toggle button */}
+        <TouchableOpacity
+          style={[
+            styles.editButton,
+            {
+              backgroundColor: isEditMode ? theme.colors.primary : theme.colors.glassBackground,
+              borderColor: theme.colors.glassBorder,
+            },
+          ]}
+          onPress={() => {
+            const newMode = !isEditMode;
+            console.log('🔄 Toggling edit mode to:', newMode);
+            setEditMode(newMode);
+          }}
+          activeOpacity={0.8}
+        >
+          <Text style={{ fontSize: 20, color: isEditMode ? '#FFFFFF' : theme.colors.text }}>
+            {isEditMode ? '✓' : '✎'}
+          </Text>
+        </TouchableOpacity>
 
         {/* Add button */}
         <TouchableOpacity
@@ -1062,6 +1118,20 @@ const styles = StyleSheet.create({
   searchInput: {
     flex: 1,
     fontSize: 16,
+  },
+  editButton: {
+    width: 50,
+    height: 50,
+    borderRadius: 25,
+    justifyContent: 'center',
+    alignItems: 'center',
+    borderWidth: 1.5,
+    marginRight: 10,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.2,
+    shadowRadius: 4,
+    elevation: 3,
   },
   zoomControlsContainer: {
     position: 'absolute',

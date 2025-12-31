@@ -1,6 +1,6 @@
 import * as FileSystem from 'expo-file-system/legacy';
 import { supabase } from '../lib/supabase';
-import { Person } from '../store/familyTreeStore';
+import { Person, PersonPosition } from '../store/familyTreeStore';
 
 /**
  * Profile from database
@@ -789,6 +789,85 @@ export const deletePerson = async (personId: string): Promise<boolean> => {
     return data === true;
   } catch (error) {
     console.error('Error in deletePerson:', error);
+    throw error;
+  }
+};
+
+/**
+ * Save person position (custom layout)
+ */
+export const savePersonPosition = async (
+  treeId: string,
+  personId: string,
+  x: number,
+  y: number
+): Promise<boolean> => {
+  try {
+    const { error } = await supabase.rpc('save_person_position', {
+      p_tree_id: treeId,
+      p_person_id: personId,
+      p_position_x: x,
+      p_position_y: y,
+    });
+
+    if (error) {
+      console.error('Error saving person position:', error);
+      throw error;
+    }
+
+    return true;
+  } catch (error) {
+    console.error('Error in savePersonPosition:', error);
+    throw error;
+  }
+};
+
+/**
+ * Get all person positions for a tree
+ */
+export const getPersonPositions = async (treeId: string): Promise<PersonPosition[]> => {
+  try {
+    const { data, error } = await supabase.rpc('get_person_positions', {
+      p_tree_id: treeId,
+    });
+
+    if (error) {
+      console.error('Error getting person positions:', error);
+      throw error;
+    }
+
+    return (data || []).map((row: any) => ({
+      personId: row.person_id,
+      x: parseFloat(row.position_x),
+      y: parseFloat(row.position_y),
+    }));
+  } catch (error) {
+    console.error('Error in getPersonPositions:', error);
+    throw error;
+  }
+};
+
+/**
+ * Delete person position (reset to auto layout)
+ */
+export const deletePersonPosition = async (
+  treeId: string,
+  personId: string
+): Promise<boolean> => {
+  try {
+    const { error } = await supabase.rpc('delete_person_position', {
+      p_tree_id: treeId,
+      p_person_id: personId,
+    });
+
+    if (error) {
+      console.error('Error deleting person position:', error);
+      throw error;
+    }
+
+    return true;
+  } catch (error) {
+    console.error('Error in deletePersonPosition:', error);
     throw error;
   }
 };
