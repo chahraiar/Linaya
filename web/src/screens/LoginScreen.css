@@ -116,6 +116,24 @@
   border-color: var(--accent-color);
 }
 
+.btn-facebook {
+  background: #1877f2;
+  color: white;
+  border: 2px solid #1877f2;
+}
+
+.btn-facebook:hover:not(:disabled) {
+  background: #166fe5;
+  border-color: #166fe5;
+  transform: translateY(-1px);
+  box-shadow: 0 4px 12px rgba(24, 119, 242, 0.4);
+}
+
+.btn-facebook:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
 .login-divider {
   text-align: center;
   margin: 24px 0;
@@ -142,6 +160,16 @@
 .login-footer {
   text-align: center;
   margin-top: 24px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.login-footer-links {
+  display: flex;
+  justify-content: center;
+  gap: 16px;
+  flex-wrap: wrap;
 }
 
 .link-button {

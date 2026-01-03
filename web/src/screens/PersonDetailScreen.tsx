@@ -1282,7 +1282,7 @@ const RelativesTab: React.FC<RelativesTabProps> = ({
       };
     }, [person.id]);
 
-    const handleVisibilityToggle = async (e: React.MouseEvent) => {
+    const handleVisibilityToggle = async (e: React.ChangeEvent<HTMLInputElement>) => {
       e.stopPropagation();
       if (!canEdit) return;
 
@@ -1383,7 +1383,7 @@ const RelativesTab: React.FC<RelativesTabProps> = ({
       {siblings.length > 0 && (
         <>
           <h3 className="section-title">{t('person.siblings')}</h3>
-          {siblings.map((p: any) => renderPersonCard(p, t('person.siblings')))}
+          {siblings.map((p: any) => renderPersonCard(p, t('person.siblings'), 'parent'))}
         </>
       )}
 

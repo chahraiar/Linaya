@@ -15,7 +15,8 @@
     "required": "required",
     "create": "Create",
     "skip": "Skip",
-    "ok": "OK"
+    "ok": "OK",
+    "back": "Back"
   },
   "tree": {
     "title": "Tree",
@@ -149,7 +150,18 @@
     "theme": "Theme",
     "reduceAnimations": "Reduce animations",
     "languageDescription": "Choose your preferred language",
-    "themeDescription": "Choose the app theme"
+    "themeDescription": "Choose the app theme",
+    "dataDeletion": "Data Deletion",
+    "dataDeletionDescription": "You can request the deletion of all your personal data. This request will be processed within 30 days in accordance with GDPR.",
+    "requestDataDeletion": "Request deletion of my data",
+    "dataDeletionWarning": "⚠️ Warning: This action is irreversible. All your data (family trees, persons, photos, etc.) will be permanently deleted. Are you sure you want to continue?",
+    "confirmDeletionRequest": "Confirm request",
+    "dataDeletionRequestSent": "Your data deletion request has been recorded. We will process it within 30 days. You will receive a confirmation email.",
+    "dataDeletionRequestError": "Error sending request"
+  },
+  "privacy": {
+    "title": "Privacy Policy",
+    "link": "Privacy Policy"
   }
 }
 

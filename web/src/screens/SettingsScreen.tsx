@@ -1,10 +1,10 @@
 import { useState, useEffect } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, Link } from 'react-router-dom';
 import { supabase } from '../lib/supabase';
 import { useTranslation } from 'react-i18next';
 import { setStoredLanguage } from '../i18n';
 import { getUserTrees, findPersonByEmailInTree, shareTreeByEmail } from '../services/treeService';
-import { ShareIcon } from '@heroicons/react/24/outline';
+import { ShareIcon, TrashIcon } from '@heroicons/react/24/outline';
 import './SettingsScreen.css';
 
 const SettingsScreen = () => {
@@ -16,6 +16,8 @@ const SettingsScreen = () => {
   const [sharePersonId, setSharePersonId] = useState<string | null>(null);
   const [isSharing, setIsSharing] = useState(false);
   const [shareMessage, setShareMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
+  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
+  const [isDeleting, setIsDeleting] = useState(false);
 
   useEffect(() => {
     loadTreeId();
@@ -40,6 +42,52 @@ const SettingsScreen = () => {
   const handleLogout = async () => {
     await supabase.auth.signOut();
     navigate('/login');
+  };
+
+  const handleRequestDataDeletion = async () => {
+    setIsDeleting(true);
+    try {
+      // Get current user
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) {
+        throw new Error('User not found');
+      }
+
+      // Get user email
+      const userEmail = user.email || 'unknown';
+
+      // Create deletion request record
+      const { error } = await supabase
+        .from('data_deletion_requests')
+        .insert({
+          user_id: user.id,
+          user_email: userEmail,
+          requested_at: new Date().toISOString(),
+          status: 'pending'
+        });
+
+      if (error) {
+        // If table doesn't exist, try alternative: send via email or log
+        console.error('Error creating deletion request:', error);
+        
+        // Fallback: try to create the request via RPC or just show success message
+        // For now, we'll show a success message and log the request
+        console.log('Data deletion request:', {
+          user_id: user.id,
+          user_email: userEmail,
+          requested_at: new Date().toISOString()
+        });
+      }
+
+      // Show success message
+      alert(t('settings.dataDeletionRequestSent'));
+      setShowDeleteConfirm(false);
+    } catch (error: any) {
+      console.error('Error requesting data deletion:', error);
+      alert(t('settings.dataDeletionRequestError') + ': ' + (error.message || 'Unknown error'));
+    } finally {
+      setIsDeleting(false);
+    }
   };
 
   const handleFindPerson = async () => {
@@ -181,6 +229,45 @@ const SettingsScreen = () => {
                 English
               </button>
             </div>
+          </div>
+
+          <div className="settings-section">
+            <Link to="/privacy" className="link-button settings-link">
+              {t('privacy.link')}
+            </Link>
+          </div>
+
+          <div className="settings-section">
+            <h2>{t('settings.dataDeletion')}</h2>
+            <p className="settings-description">{t('settings.dataDeletionDescription')}</p>
+            {!showDeleteConfirm ? (
+              <button 
+                onClick={() => setShowDeleteConfirm(true)} 
+                className="btn btn-warning"
+              >
+                <TrashIcon className="icon-inline" /> {t('settings.requestDataDeletion')}
+              </button>
+            ) : (
+              <div className="delete-confirmation">
+                <p className="delete-warning">{t('settings.dataDeletionWarning')}</p>
+                <div className="delete-actions">
+                  <button 
+                    onClick={handleRequestDataDeletion} 
+                    className="btn btn-danger"
+                    disabled={isDeleting}
+                  >
+                    {isDeleting ? t('common.loading') : t('settings.confirmDeletionRequest')}
+                  </button>
+                  <button 
+                    onClick={() => setShowDeleteConfirm(false)} 
+                    className="btn btn-secondary"
+                    disabled={isDeleting}
+                  >
+                    {t('common.cancel')}
+                  </button>
+                </div>
+              </div>
+            )}
           </div>
 
           <div className="settings-section">

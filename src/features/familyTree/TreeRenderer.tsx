@@ -6,6 +6,21 @@ import { Cluster, TreeNode } from './types';
 import { PersonCard, CARD_WIDTH, CARD_HEIGHT } from './PersonCard';
 import { useFamilyTreeStore } from '../../store/familyTreeStore';
 
+// Use a large coordinate space for both SVG and cards
+// The parent Animated.View will apply zoom/pan transformations
+// So we work in a virtual coordinate space where (0,0) is the center
+const VIRTUAL_WIDTH = 2000;
+const VIRTUAL_HEIGHT = 2000;
+// ViewBox must match the coordinate space used by transformX/transformY
+// transformX returns centerX + x, where centerX = 1000
+// Layout coordinates typically range from -1000 to +1000, transforming to 0-2000
+// ViewBox: 0,0 to 2000,2000 matches the normal transformed coordinate range
+// This ensures links are rendered correctly
+const VIEWBOX_X = 0;
+const VIEWBOX_Y = 0;
+const VIEWBOX_WIDTH = VIRTUAL_WIDTH;
+const VIEWBOX_HEIGHT = VIRTUAL_HEIGHT;
+
 // Component for draggable card - separate component to allow proper hooks usage
 const DraggableCard: React.FC<{
   node: TreeNode;
@@ -16,6 +31,9 @@ const DraggableCard: React.FC<{
   scale: number;
   onNodePress: (personId: string) => void;
   onPositionChange?: (personId: string, x: number, y: number) => void;
+  onNodeHide?: (personId: string) => void;
+  canEdit?: boolean;
+  selfPersonId?: string;
   treeId?: string;
   draggingNodeId: React.MutableRefObject<string | null>;
   dragStartPosition: React.MutableRefObject<{ x: number; y: number } | null>;
@@ -31,6 +49,9 @@ const DraggableCard: React.FC<{
   scale,
   onNodePress,
   onPositionChange,
+  onNodeHide,
+  canEdit = false,
+  selfPersonId,
   treeId,
   draggingNodeId,
   dragStartPosition,
@@ -144,8 +165,8 @@ const DraggableCard: React.FC<{
   const cardStyle = [
     styles.cardContainer,
     {
-      left: x - CARD_WIDTH / 2 - 1000, // VIRTUAL_WIDTH / 2
-      top: y - CARD_HEIGHT / 2 - 1000, // VIRTUAL_HEIGHT / 2
+      left: x - CARD_WIDTH / 2 - VIRTUAL_WIDTH / 2,
+      top: y - CARD_HEIGHT / 2 - VIRTUAL_HEIGHT / 2,
       zIndex: isEditMode && draggingNodeId.current === node.person.id ? 200 : 100,
       opacity: isEditMode && draggingNodeId.current === node.person.id ? 0.8 : 1,
     },
@@ -196,6 +217,9 @@ const DraggableCard: React.FC<{
         onPress={() => {}}
         isSelected={isSelected}
         disableTouch={true}
+        isSelf={selfPersonId === node.person.id}
+        onHide={onNodeHide}
+        canEdit={canEdit}
       />
     </TouchableOpacity>
   );
@@ -264,14 +288,11 @@ export const TreeRenderer: React.FC<TreeRendererProps> = ({
   React.useEffect(() => {
     // console.log('🔧 TreeRenderer - isEditMode changed to:', isEditMode);
   }, [isEditMode]);
-  // Use a large coordinate space for both SVG and cards
-  // The parent Animated.View will apply zoom/pan transformations
-  // So we work in a virtual coordinate space where (0,0) is the center
-  const VIRTUAL_WIDTH = 2000;
-  const VIRTUAL_HEIGHT = 2000;
+  
   const centerX = VIRTUAL_WIDTH / 2;
   const centerY = VIRTUAL_HEIGHT / 2;
   // Transform layout coordinates (centered at 0,0) to virtual space (centered at centerX, centerY)
+  // Allow negative values and values beyond VIRTUAL_WIDTH/HEIGHT to support panning
   const transformX = (x: number) => {
     if (isNaN(x) || !isFinite(x)) return centerX;
     return centerX + x;
@@ -483,7 +504,8 @@ export const TreeRenderer: React.FC<TreeRendererProps> = ({
         <Svg
           width={VIRTUAL_WIDTH}
           height={VIRTUAL_HEIGHT}
-          viewBox={`0 0 ${VIRTUAL_WIDTH} ${VIRTUAL_HEIGHT}`}
+          viewBox={`${VIEWBOX_X} ${VIEWBOX_Y} ${VIEWBOX_WIDTH} ${VIEWBOX_HEIGHT}`}
+          preserveAspectRatio="xMidYMid meet"
           style={[
             {
               position: 'absolute',
@@ -527,6 +549,9 @@ export const TreeRenderer: React.FC<TreeRendererProps> = ({
                 scale={scale}
                 onNodePress={onNodePress}
                 onPositionChange={onNodePositionChange}
+                onNodeHide={onNodeHide}
+                canEdit={canEdit}
+                selfPersonId={selfPersonId}
                 treeId={treeId}
                 draggingNodeId={draggingNodeId}
                 dragStartPosition={dragStartPosition}
@@ -547,7 +572,8 @@ export const TreeRenderer: React.FC<TreeRendererProps> = ({
       <Svg
         width={VIRTUAL_WIDTH}
         height={VIRTUAL_HEIGHT}
-        viewBox={`0 0 ${VIRTUAL_WIDTH} ${VIRTUAL_HEIGHT}`}
+        viewBox={`${VIEWBOX_X} ${VIEWBOX_Y} ${VIEWBOX_WIDTH} ${VIEWBOX_HEIGHT}`}
+        preserveAspectRatio="xMidYMid meet"
         style={[
           {
             position: 'absolute',
@@ -588,6 +614,9 @@ export const TreeRenderer: React.FC<TreeRendererProps> = ({
               scale={scale}
               onNodePress={onNodePress}
               onPositionChange={onNodePositionChange}
+              onNodeHide={onNodeHide}
+              canEdit={canEdit}
+              selfPersonId={selfPersonId}
               treeId={treeId}
               draggingNodeId={draggingNodeId}
               dragStartPosition={dragStartPosition}
@@ -607,6 +636,7 @@ const styles = StyleSheet.create({
     position: 'relative',
     width: '100%',
     height: '100%',
+    overflow: 'visible',
   },
   cardContainer: {
     position: 'absolute',

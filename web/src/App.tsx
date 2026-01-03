@@ -5,6 +5,8 @@ import LoginScreen from './screens/LoginScreen';
 import FamilyTreeScreen from './screens/FamilyTreeScreen';
 import PersonDetailScreen from './screens/PersonDetailScreen';
 import SettingsScreen from './screens/SettingsScreen';
+import PrivacyPolicyScreen from './screens/PrivacyPolicyScreen';
+import AuthCallbackScreen from './screens/AuthCallbackScreen';
 import './App.css';
 
 function App() {
@@ -133,6 +135,14 @@ VITE_SUPABASE_ANON_KEY=your-anon-key-here`}
         <Route 
           path="/settings" 
           element={session ? <SettingsScreen /> : <Navigate to="/login" />} 
+        />
+        <Route 
+          path="/privacy" 
+          element={<PrivacyPolicyScreen />} 
+        />
+        <Route 
+          path="/auth/callback" 
+          element={<AuthCallbackScreen />} 
         />
       </Routes>
     </BrowserRouter>

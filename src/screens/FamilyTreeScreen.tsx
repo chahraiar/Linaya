@@ -1151,6 +1151,7 @@ const styles = StyleSheet.create({
     flex: 1,
     position: 'relative',
     backgroundColor: 'transparent', // Will use Screen background
+    overflow: 'visible',
   },
   canvas: {
     ...StyleSheet.absoluteFillObject,

@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, Link } from 'react-router-dom';
 import { supabase } from '../lib/supabase';
 import { useTranslation } from 'react-i18next';
 import './LoginScreen.css';
@@ -48,12 +48,29 @@ const LoginScreen = () => {
       const { error } = await supabase.auth.signInWithOAuth({
         provider: 'google',
         options: {
-          redirectTo: `${window.location.origin}/`,
+          redirectTo: `${window.location.origin}/auth/callback`,
         },
       });
       if (error) throw error;
     } catch (err: any) {
       setError(err.message || t('auth.loginError'));
+      setLoading(false);
+    }
+  };
+
+  const handleFacebookLogin = async () => {
+    setLoading(true);
+    setError(null);
+    try {
+      const { error } = await supabase.auth.signInWithOAuth({
+        provider: 'facebook',
+        options: {
+          redirectTo: `${window.location.origin}/auth/callback`,
+        },
+      });
+      if (error) throw error;
+    } catch (err: any) {
+      setError(err.message || t('auth.facebookError'));
       setLoading(false);
     }
   };
@@ -117,6 +134,14 @@ const LoginScreen = () => {
           {t('auth.signInWithGoogle')}
         </button>
 
+        <button 
+          onClick={handleFacebookLogin}
+          className="btn btn-facebook"
+          disabled={loading}
+        >
+          {t('auth.signInWithFacebook')}
+        </button>
+
         <div className="login-footer">
           <button 
             type="button"
@@ -125,6 +150,11 @@ const LoginScreen = () => {
           >
             {isSignUp ? t('auth.alreadyHaveAccount') : t('auth.dontHaveAccount')}
           </button>
+          <div className="login-footer-links">
+            <Link to="/privacy" className="link-button">
+              {t('privacy.link')}
+            </Link>
+          </div>
         </div>
       </div>
     </div>

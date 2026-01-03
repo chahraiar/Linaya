@@ -158,7 +158,18 @@
     "shareButton": "Partager en visualisation",
     "shareSuccess": "Arbre partagé avec succès",
     "shareError": "Erreur lors du partage",
-    "noPersonFound": "Aucune personne trouvée avec cet email"
+    "noPersonFound": "Aucune personne trouvée avec cet email",
+    "dataDeletion": "Suppression des données",
+    "dataDeletionDescription": "Vous pouvez demander la suppression de toutes vos données personnelles. Cette demande sera traitée dans les 30 jours conformément au RGPD.",
+    "requestDataDeletion": "Demander la suppression de mes données",
+    "dataDeletionWarning": "⚠️ Attention : Cette action est irréversible. Toutes vos données (arbres généalogiques, personnes, photos, etc.) seront définitivement supprimées. Êtes-vous sûr de vouloir continuer ?",
+    "confirmDeletionRequest": "Confirmer la demande",
+    "dataDeletionRequestSent": "Votre demande de suppression de données a été enregistrée. Nous la traiterons dans les 30 jours. Vous recevrez une confirmation par email.",
+    "dataDeletionRequestError": "Erreur lors de l'envoi de la demande"
+  },
+  "privacy": {
+    "title": "Politique de Confidentialité",
+    "link": "Politique de confidentialité"
   }
 }
 
