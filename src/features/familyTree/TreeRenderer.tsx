@@ -39,7 +39,7 @@ const DraggableCard: React.FC<{
   onDragOffsetChange,
 }) => {
   // ⚠️ LOG DE RENDER - doit apparaître à chaque re-render
-  console.log('🔄 DraggableCard RENDER for:', node.person.id, 'isEditMode:', isEditMode);
+  // console.log('🔄 DraggableCard RENDER for:', node.person.id, 'isEditMode:', isEditMode);
   
   const baseX = customPositions[node.person.id]?.x ?? node.position.x;
   const baseY = customPositions[node.person.id]?.y ?? node.position.y;
@@ -50,7 +50,7 @@ const DraggableCard: React.FC<{
   
   // Force re-render when isEditMode changes
   React.useEffect(() => {
-    console.log('🔄 DraggableCard effect - isEditMode:', isEditMode, 'for node:', node.person.id);
+    // console.log('🔄 DraggableCard effect - isEditMode:', isEditMode, 'for node:', node.person.id);
   }, [isEditMode, node.person.id]);
 
   React.useEffect(() => {
@@ -60,26 +60,26 @@ const DraggableCard: React.FC<{
   }, [baseX, baseY]);
   
   const panResponder = useMemo(() => {
-    console.log('🔧 useMemo called for:', node.person.id, 'isEditMode:', isEditMode);
+    // console.log('🔧 useMemo called for:', node.person.id, 'isEditMode:', isEditMode);
     if (!isEditMode) {
       return null;
     }
-    console.log('✅ Creating PanResponder for node:', node.person.id);
+    // console.log('✅ Creating PanResponder for node:', node.person.id);
     
     return PanResponder.create({
       onStartShouldSetPanResponder: () => {
-        console.log('🎯 onStartShouldSetPanResponder - returning true for:', node.person.id);
+        // console.log('🎯 onStartShouldSetPanResponder - returning true for:', node.person.id);
         return true;
       },
       onStartShouldSetPanResponderCapture: () => {
-        console.log('🎯 onStartShouldSetPanResponderCapture - returning true for:', node.person.id);
+        // console.log('🎯 onStartShouldSetPanResponderCapture - returning true for:', node.person.id);
         return true;
       },
       onMoveShouldSetPanResponder: (evt, gestureState) => {
         const shouldMove = Math.abs(gestureState.dx) > 2 || Math.abs(gestureState.dy) > 2;
-        if (shouldMove) {
-          console.log('🎯 onMoveShouldSetPanResponder - returning true for:', node.person.id, 'dx:', gestureState.dx, 'dy:', gestureState.dy);
-        }
+        // if (shouldMove) {
+        //   console.log('🎯 onMoveShouldSetPanResponder - returning true for:', node.person.id, 'dx:', gestureState.dx, 'dy:', gestureState.dy);
+        // }
         return shouldMove;
       },
       onPanResponderGrant: () => {
@@ -91,7 +91,7 @@ const DraggableCard: React.FC<{
         if (onDragOffsetChange) {
           onDragOffsetChange(node.person.id, { x: 0, y: 0 });
         }
-        console.log('🎯 Drag GRANTED for:', node.person.id, 'at position:', basePositionRef.current.x, basePositionRef.current.y);
+        console.log('🟢 CARD DRAG START - Person:', node.person.id, 'Position initiale X:', basePositionRef.current.x.toFixed(1), 'Y:', basePositionRef.current.y.toFixed(1));
       },
       onPanResponderMove: (evt, gestureState) => {
         if (draggingNodeId.current === node.person.id && dragStartPosition.current) {
@@ -102,17 +102,19 @@ const DraggableCard: React.FC<{
           if (onDragOffsetChange) {
             onDragOffsetChange(node.person.id, { x: dx, y: dy });
           }
-          console.log('🎯 Drag MOVE:', node.person.id, 'dx:', gestureState.dx, 'dy:', gestureState.dy, 'offset:', dx, dy);
+          const distance = Math.sqrt(gestureState.dx * gestureState.dx + gestureState.dy * gestureState.dy);
+          console.log('➡️ CARD DRAG - Person:', node.person.id, 'Position X:', (basePositionRef.current.x + dx).toFixed(1), 'Y:', (basePositionRef.current.y + dy).toFixed(1), 'Distance:', distance.toFixed(1));
         }
       },
       onPanResponderRelease: () => {
-        console.log('🎯 Drag RELEASED for:', node.person.id);
         if (draggingNodeId.current === node.person.id) {
           const finalX = basePositionRef.current.x + dragOffsetRef.current.x;
           const finalY = basePositionRef.current.y + dragOffsetRef.current.y;
+          const totalDistance = Math.sqrt(dragOffsetRef.current.x * dragOffsetRef.current.x + dragOffsetRef.current.y * dragOffsetRef.current.y);
+          console.log('🔴 CARD DRAG END - Person:', node.person.id, 'Position finale X:', finalX.toFixed(1), 'Y:', finalY.toFixed(1), 'Distance totale:', totalDistance.toFixed(1));
           updateCustomPosition(node.person.id, finalX, finalY);
           if (treeId && onPositionChange) {
-            console.log('💾 Saving position for:', node.person.id, { x: finalX, y: finalY });
+            // console.log('💾 Saving position for:', node.person.id, { x: finalX, y: finalY });
             onPositionChange(node.person.id, finalX, finalY);
           }
         }
@@ -126,7 +128,7 @@ const DraggableCard: React.FC<{
         dragStartPosition.current = null;
       },
       onPanResponderTerminate: () => {
-        console.log('🎯 Drag TERMINATED for:', node.person.id);
+        // console.log('🎯 Drag TERMINATED for:', node.person.id);
         dragOffset.setValue({ x: 0, y: 0 });
         dragOffsetRef.current = { x: 0, y: 0 };
         isDraggingRef.current = false;
@@ -150,15 +152,15 @@ const DraggableCard: React.FC<{
   ];
   
   // Debug: log render decision
-  console.log('🎨 DraggableCard render decision for:', node.person.id, {
-    isEditMode,
-    hasPanResponder: !!panResponder,
-    willRenderView: isEditMode && panResponder,
-  });
+  // console.log('🎨 DraggableCard render decision for:', node.person.id, {
+  //   isEditMode,
+  //   hasPanResponder: !!panResponder,
+  //   willRenderView: isEditMode && panResponder,
+  // });
   
   // In edit mode with PanResponder, use View with PanResponder
   if (isEditMode && panResponder) {
-    console.log('✅ Rendering draggable View for:', node.person.id);
+    // console.log('✅ Rendering draggable View for:', node.person.id);
     return (
       <Animated.View
         style={[...cardStyle, { transform: dragOffset.getTranslateTransform() }]}
@@ -169,13 +171,16 @@ const DraggableCard: React.FC<{
           onPress={() => {}}
           isSelected={isSelected}
           disableTouch={true}
+          isSelf={selfPersonId === node.person.id}
+          onHide={onNodeHide}
+          canEdit={canEdit}
         />
       </Animated.View>
     );
   }
   
   // Normal mode: use TouchableOpacity
-  console.log('📌 Rendering TouchableOpacity for:', node.person.id, 'isEditMode:', isEditMode, 'panResponder:', !!panResponder);
+  // console.log('📌 Rendering TouchableOpacity for:', node.person.id, 'isEditMode:', isEditMode, 'panResponder:', !!panResponder);
   return (
     <TouchableOpacity
       style={cardStyle}
@@ -203,6 +208,9 @@ interface TreeRendererProps {
   translateY: number;
   onNodePress: (personId: string) => void;
   onNodePositionChange?: (personId: string, x: number, y: number) => void;
+  onNodeHide?: (personId: string) => void;
+  canEdit?: boolean;
+  selfPersonId?: string;
   renderLinksOnly?: boolean;
   renderCardsOnly?: boolean;
   treeId?: string;
@@ -217,6 +225,9 @@ export const TreeRenderer: React.FC<TreeRendererProps> = ({
   translateY,
   onNodePress,
   onNodePositionChange,
+  onNodeHide,
+  canEdit = false,
+  selfPersonId,
   renderLinksOnly = false,
   renderCardsOnly = false,
   treeId,
@@ -251,7 +262,7 @@ export const TreeRenderer: React.FC<TreeRendererProps> = ({
   
   // Debug: log edit mode changes
   React.useEffect(() => {
-    console.log('🔧 TreeRenderer - isEditMode changed to:', isEditMode);
+    // console.log('🔧 TreeRenderer - isEditMode changed to:', isEditMode);
   }, [isEditMode]);
   // Use a large coordinate space for both SVG and cards
   // The parent Animated.View will apply zoom/pan transformations

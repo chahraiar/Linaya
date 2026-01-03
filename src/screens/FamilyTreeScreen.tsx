@@ -23,6 +23,9 @@ import {
   Tree,
   getPersonPositions,
   savePersonPosition,
+  setPersonVisibility,
+  getUserTreeRole,
+  getSelfPersonId,
 } from '../services/treeService';
 import { AddPersonModal } from '../components/AddPersonModal';
 import { supabase } from '../lib/supabase';
@@ -61,6 +64,8 @@ export const FamilyTreeScreen: React.FC = () => {
   const [currentTree, setCurrentTree] = useState<Tree | null>(null);
   const [loading, setLoading] = useState(true);
   const [creatingTree, setCreatingTree] = useState(false);
+  const [selfPersonId, setSelfPersonId] = useState<string | null>(null);
+  const [canEditTree, setCanEditTree] = useState(false);
   
   // Animation values for zoom and pan - using absolute values (no offsets)
   const scaleAnim = useRef(new Animated.Value(DEFAULT_SCALE)).current;
@@ -442,27 +447,30 @@ export const FamilyTreeScreen: React.FC = () => {
   };
 
   // Update clusters when persons change
+  // Filter out hidden persons (isVisible === false)
   useEffect(() => {
     const allPersons = Object.values(persons);
-    console.log('Updating clusters, persons count:', allPersons.length);
-    if (allPersons.length > 0) {
+    const visiblePersons = allPersons.filter(p => p.isVisible !== false);
+    // console.log('Updating clusters, visible persons count:', visiblePersons.length, '(total:', allPersons.length, ')');
+    if (visiblePersons.length > 0) {
       // Log persons with their relationships for debugging
-      allPersons.forEach((p) => {
-        const parentNames = p.parentIds.map(id => {
-          const parent = allPersons.find(pp => pp.id === id);
-          return parent ? `${parent.firstName} ${parent.lastName}` : id;
-        });
-        console.log(`Person: ${p.firstName} ${p.lastName} - Parents (${p.parentIds.length}): [${parentNames.join(', ')}], Children: ${p.childrenIds.length}, Partner: ${p.partnerId ? 'Yes' : 'No'}`);
-      });
-      const newClusters = createClusters(allPersons);
-      console.log('Clusters created:', newClusters.length, 'clusters with', newClusters.reduce((sum, c) => sum + c.nodes.length, 0), 'nodes');
+      // visiblePersons.forEach((p) => {
+      //   const parentNames = p.parentIds.map(id => {
+      //     const parent = visiblePersons.find(pp => pp.id === id);
+      //     return parent ? `${parent.firstName} ${parent.lastName}` : id;
+      //   });
+      //   console.log(`Person: ${p.firstName} ${p.lastName} - Parents (${p.parentIds.length}): [${parentNames.join(', ')}], Children: ${p.childrenIds.length}, Partner: ${p.partnerId ? 'Yes' : 'No'}`);
+      // });
+      const newClusters = createClusters(visiblePersons);
+      // console.log('Clusters created:', newClusters.length, 'clusters with', newClusters.reduce((sum, c) => sum + c.nodes.length, 0), 'nodes');
       // Log nodes in each cluster
-      newClusters.forEach((cluster, idx) => {
-        console.log(`Cluster ${idx}: ${cluster.nodes.length} nodes - ${cluster.nodes.map(n => `${n.person.firstName} ${n.person.lastName}`).join(', ')}`);
-      });
+      // newClusters.forEach((cluster, idx) => {
+      //   console.log(`Cluster ${idx}: ${cluster.nodes.length} nodes - ${cluster.nodes.map(n => `${n.person.firstName} ${n.person.lastName}`).join(', ')}`);
+      // });
       setClusters(newClusters);
     } else {
-      console.log('No persons to create clusters from');
+      // console.log('No visible persons to create clusters from');
+      setClusters([]);
     }
   }, [persons]);
 
@@ -502,7 +510,7 @@ export const FamilyTreeScreen: React.FC = () => {
         hasMoved.current = false;
         // Always capture pinch (2 touches)
         if (touchCount === 2) {
-          console.log('📌 Pinch detected in onStartShouldSetPanResponder');
+          // console.log('📌 Pinch detected in onStartShouldSetPanResponder');
           isPinching.current = true;
           const touch1 = evt.nativeEvent.touches[0];
           const touch2 = evt.nativeEvent.touches[1];
@@ -538,18 +546,28 @@ export const FamilyTreeScreen: React.FC = () => {
         translateXAnim.stopAnimation();
         translateYAnim.stopAnimation();
         
-        // Save current values as base for this gesture (simplified approach)
-        baseScale.current = scale;
-        basePanX.current = translateX;
-        basePanY.current = translateY;
+        // Get current animated values directly (they are the source of truth)
+        const currentX = translateXAnim._value || 0;
+        const currentY = translateYAnim._value || 0;
+        const currentScale = scaleAnim._value || DEFAULT_SCALE;
+        
+        // Save current values as base for this gesture
+        baseScale.current = currentScale;
+        basePanX.current = currentX;
+        basePanY.current = currentY;
+        
+        // Also update state to keep it in sync
+        setScale(currentScale);
+        setTranslateX(currentX);
+        setTranslateY(currentY);
         
         // If not pinching and we have a single touch, it's a pan gesture
         if (!isPinching.current && evt.nativeEvent.touches?.length === 1) {
           isPanning.current = true;
-          console.log('✅ Pan gesture started');
+          console.log('🟢 DRAG START - Position initiale X:', basePanX.current.toFixed(1), 'Y:', basePanY.current.toFixed(1));
         }
         
-        console.log('✅ PanResponder GRANTED - isPinching:', isPinching.current, 'isPanning:', isPanning.current, 'baseScale:', baseScale.current.toFixed(2), 'basePanX:', basePanX.current.toFixed(1), 'basePanY:', basePanY.current.toFixed(1));
+        // console.log('✅ PanResponder GRANTED - isPinching:', isPinching.current, 'isPanning:', isPanning.current, 'baseScale:', baseScale.current.toFixed(2), 'basePanX:', basePanX.current.toFixed(1), 'basePanY:', basePanY.current.toFixed(1));
       },
       onPanResponderMove: (evt, gestureState) => {
         // Handle pinch zoom
@@ -570,7 +588,7 @@ export const FamilyTreeScreen: React.FC = () => {
             if (isFinite(clampedScale) && clampedScale > 0) {
               // Set absolute value directly (no offsets)
               scaleAnim.setValue(clampedScale);
-              console.log('📌 PINCH ZOOM - distance:', distance.toFixed(1), 'prevDistance:', lastPinchDistance.current.toFixed(1), 'multiplier:', scaleMultiplier.toFixed(3), 'newScale:', clampedScale.toFixed(2));
+              // console.log('📌 PINCH ZOOM - distance:', distance.toFixed(1), 'prevDistance:', lastPinchDistance.current.toFixed(1), 'multiplier:', scaleMultiplier.toFixed(3), 'newScale:', clampedScale.toFixed(2));
             }
           }
           lastPinchDistance.current = distance;
@@ -578,16 +596,18 @@ export const FamilyTreeScreen: React.FC = () => {
         // Handle pan (drag)
         else if (isPanning.current && !isPinching.current) {
           // Add gesture displacement to base position
-          translateXAnim.setValue(basePanX.current + gestureState.dx);
-          translateYAnim.setValue(basePanY.current + gestureState.dy);
-          console.log('➡️ Pan - baseX:', basePanX.current.toFixed(1), 'baseY:', basePanY.current.toFixed(1), 'dx:', gestureState.dx.toFixed(1), 'dy:', gestureState.dy.toFixed(1));
-        } else {
-          console.log('⚠️ PanResponderMove but no action - touches:', evt.nativeEvent.touches?.length, 'isPinching:', isPinching.current, 'isPanning:', isPanning.current);
+          const newX = basePanX.current + gestureState.dx;
+          const newY = basePanY.current + gestureState.dy;
+          translateXAnim.setValue(newX);
+          translateYAnim.setValue(newY);
+          // Update state immediately to reflect the new position
+          setTranslateX(newX);
+          setTranslateY(newY);
+          // Log only during drag
+          console.log('➡️ DRAG - Position X:', newX.toFixed(1), 'Y:', newY.toFixed(1), 'Distance:', Math.sqrt(gestureState.dx * gestureState.dx + gestureState.dy * gestureState.dy).toFixed(1));
         }
       },
       onPanResponderRelease: (_, gestureState) => {
-        console.log('🔴 PanResponder RELEASED - isPinching:', isPinching.current, 'isPanning:', isPanning.current, 'hasMoved:', hasMoved.current);
-        
         // Update last scale if we pinched
         if (isPinching.current) {
           // Stop any ongoing animations first
@@ -603,39 +623,47 @@ export const FamilyTreeScreen: React.FC = () => {
           }
         }
 
-        // Only flatten if we actually did something
+        // Handle pan release
         if (isPanning.current) {
           // Stop any ongoing animations first
           translateXAnim.stopAnimation();
           translateYAnim.stopAnimation();
           
-          // For pan, flatten offsets to preserve position
-          translateXAnim.flattenOffset();
-          translateYAnim.flattenOffset();
+          // Calculate final position
+          const finalX = basePanX.current + gestureState.dx;
+          const finalY = basePanY.current + gestureState.dy;
+          const totalDistance = Math.sqrt(gestureState.dx * gestureState.dx + gestureState.dy * gestureState.dy);
+          
+          // Set the final position directly (no offsets needed since we're using absolute values)
+          translateXAnim.setValue(finalX);
+          translateYAnim.setValue(finalY);
+          
+          // Update state with final position
+          setTranslateX(finalX);
+          setTranslateY(finalY);
+          
+          // Update base values for next gesture
+          basePanX.current = finalX;
+          basePanY.current = finalY;
+          
+          console.log('🔴 DRAG END - Position finale X:', finalX.toFixed(1), 'Y:', finalY.toFixed(1), 'Distance totale:', totalDistance.toFixed(1));
         } else if (!isPinching.current) {
           // Just reset offsets without flattening if we didn't do anything
           translateXAnim.setOffset(0);
           translateYAnim.setOffset(0);
-          scaleAnim.setValue(baseScale.current);
-          translateXAnim.setValue(0);
-          translateYAnim.setValue(0);
-          scaleAnim.setValue(1);
-          console.log('🔄 Reset offsets without flattening (no action)');
+          // console.log('🔄 Reset offsets without flattening (no action)');
         }
 
         // Save current values as new base for next gesture (simplified approach)
         if (isPinching.current || isPanning.current) {
           // Get final values from state (they already have the correct absolute values)
           const finalScale = Math.max(MIN_SCALE, Math.min(MAX_SCALE, scale));
-          const finalPanX = translateX;
-          const finalPanY = translateY;
           
           // Update base values for next gesture
           baseScale.current = finalScale;
-          basePanX.current = finalPanX;
-          basePanY.current = finalPanY;
+          // basePanX and basePanY already updated above for pan
           
-          console.log('💾 Saved base values - scale:', baseScale.current.toFixed(2), 'panX:', basePanX.current.toFixed(1), 'panY:', basePanY.current.toFixed(1));
+          // console.log('💾 Saved base values - scale:', baseScale.current.toFixed(2), 'panX:', basePanX.current.toFixed(1), 'panY:', basePanY.current.toFixed(1));
         }
         
         // Reset state
@@ -645,7 +673,7 @@ export const FamilyTreeScreen: React.FC = () => {
         hasMoved.current = false;
       },
       onPanResponderTerminationRequest: () => {
-        console.log('🛑 PanResponderTerminationRequest - ALLOWING termination');
+        // console.log('🛑 PanResponderTerminationRequest - ALLOWING termination');
         // Allow children (cards) to take over if they request it
         return true;
       },
@@ -772,6 +800,32 @@ export const FamilyTreeScreen: React.FC = () => {
     }
   };
 
+  const handleHidePerson = async (personId: string) => {
+    if (!canEditTree || !currentTree) return;
+    
+    try {
+      const success = await setPersonVisibility(personId, false);
+      if (success) {
+        // Update person in store immediately (optimistic update)
+        const person = getPerson(personId);
+        if (person) {
+          const { updatePerson } = useFamilyTreeStore.getState();
+          updatePerson(personId, { isVisible: false });
+        }
+        // Reload tree data to refresh
+        const { persons: treePersons } = await getTreeData(currentTree.id);
+        const cleanedPersons = cleanPersonData(treePersons);
+        setPersons(cleanedPersons);
+        Alert.alert('Succès', 'Carte masquée avec succès');
+      } else {
+        Alert.alert('Erreur', 'Erreur lors du masquage de la carte');
+      }
+    } catch (error: any) {
+      console.error('Error hiding person:', error);
+      Alert.alert('Erreur', `Erreur lors du masquage de la carte: ${error.message || 'Erreur inconnue'}`);
+    }
+  };
+
   return (
     <Screen gradient={false} style={{ backgroundColor: '#FAF9F6' }}>
       {/* Header */}
@@ -885,6 +939,9 @@ export const FamilyTreeScreen: React.FC = () => {
               translateX={0}
               translateY={0}
               onNodePress={handleNodePress}
+              onNodeHide={handleHidePerson}
+              canEdit={canEditTree}
+              selfPersonId={selfPersonId || undefined}
               renderLinksOnly={true}
             />
           ) : null}
@@ -911,6 +968,9 @@ export const FamilyTreeScreen: React.FC = () => {
               translateX={translateX}
               translateY={translateY}
               onNodePress={handleNodePress}
+              onNodeHide={handleHidePerson}
+              canEdit={canEditTree}
+              selfPersonId={selfPersonId || undefined}
               onNodePositionChange={async (personId, x, y) => {
                 if (currentTree) {
                   try {

@@ -38,6 +38,7 @@ export interface PersonDB {
   display_name: string | null;
   gender: string | null;
   is_living: boolean;
+  is_visible: boolean;
   birth_date: string | null;
   death_date: string | null;
   notes: string | null;
@@ -166,6 +167,10 @@ export const getTreeData = async (treeId: string): Promise<{
       // Extract year from date
       const birthYear = p.birth_date ? new Date(p.birth_date).getFullYear() : undefined;
       const deathYear = p.death_date ? new Date(p.death_date).getFullYear() : undefined;
+      
+      // Extract date in YYYY-MM-DD format (keep full date, not just year)
+      const birthDate = p.birth_date ? p.birth_date.split('T')[0] : undefined;
+      const deathDate = p.death_date ? p.death_date.split('T')[0] : undefined;
 
       return {
         id: p.id,
@@ -173,6 +178,10 @@ export const getTreeData = async (treeId: string): Promise<{
         lastName: p.last_name || '',
         birthYear,
         deathYear,
+        birthDate,
+        deathDate,
+        gender: p.gender || undefined,
+        isVisible: p.is_visible !== undefined ? p.is_visible : true,
         parentIds,
         partnerId,
         childrenIds,
@@ -373,6 +382,7 @@ export const updatePerson = async (
     deathDate?: string | null;
     gender?: string;
     isLiving?: boolean;
+    isVisible?: boolean;
     notes?: string;
   }
 ): Promise<Person | null> => {
@@ -393,6 +403,7 @@ export const updatePerson = async (
         p_death_date: updates.deathDate || null,
         p_gender: updates.gender,
         p_is_living: updates.isLiving,
+        p_is_visible: updates.isVisible !== undefined ? updates.isVisible : null,
         p_notes: updates.notes,
       });
 
@@ -408,12 +419,21 @@ export const updatePerson = async (
     const personData = personDataArray[0];
 
     // Convert to app format
+    const birthYear = personData.birth_date ? new Date(personData.birth_date).getFullYear() : undefined;
+    const deathYear = personData.death_date ? new Date(personData.death_date).getFullYear() : undefined;
+    const birthDate = personData.birth_date ? personData.birth_date.split('T')[0] : undefined;
+    const deathDate = personData.death_date ? personData.death_date.split('T')[0] : undefined;
+
     const person: Person = {
       id: personData.person_id || personData.id,
       firstName: personData.first_name || '',
       lastName: personData.last_name || '',
-      birthYear: personData.birth_date ? new Date(personData.birth_date).getFullYear() : undefined,
-      deathYear: personData.death_date ? new Date(personData.death_date).getFullYear() : undefined,
+      birthYear,
+      deathYear,
+      birthDate,
+      deathDate,
+      gender: personData.gender || undefined,
+      isVisible: personData.is_visible !== undefined ? personData.is_visible : true,
       parentIds: [],
       partnerId: undefined,
       childrenIds: [],
@@ -869,6 +889,281 @@ export const deletePersonPosition = async (
   } catch (error) {
     console.error('Error in deletePersonPosition:', error);
     throw error;
+  }
+};
+
+/**
+ * Person Media interface
+ */
+export interface PersonMedia {
+  id: string;
+  person_id: string;
+  type: 'photo' | 'document';
+  storage_path: string;
+  caption: string | null;
+  taken_at: string | null;
+  is_primary: boolean;
+  created_at: string;
+}
+
+/**
+ * Set person visibility
+ */
+export const setPersonVisibility = async (
+  personId: string,
+  isVisible: boolean
+): Promise<boolean> => {
+  try {
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) {
+      throw new Error('User not authenticated');
+    }
+
+    const { data, error } = await supabase
+      .rpc('set_person_visibility', {
+        p_person_id: personId,
+        p_is_visible: isVisible,
+      });
+
+    if (error) {
+      console.error('Error setting person visibility:', error);
+      return false;
+    }
+
+    return data === true;
+  } catch (error) {
+    console.error('Error in setPersonVisibility:', error);
+    return false;
+  }
+};
+
+/**
+ * Get all media for a person
+ */
+export const getPersonMedia = async (personId: string): Promise<PersonMedia[]> => {
+  try {
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) {
+      throw new Error('User not authenticated');
+    }
+
+    const { data, error } = await supabase
+      .rpc('get_person_media', { p_person_id: personId });
+
+    if (error) {
+      console.error('Error fetching person media:', error);
+      return [];
+    }
+
+    return (data || []) as PersonMedia[];
+  } catch (error) {
+    console.error('Error in getPersonMedia:', error);
+    return [];
+  }
+};
+
+/**
+ * Get signed URL for a media item
+ */
+export const getPersonMediaUrl = async (storagePath: string): Promise<string | null> => {
+  try {
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) {
+      return null;
+    }
+
+    const { data: urlData, error: urlError } = await supabase.storage
+      .from('family-tree-media')
+      .createSignedUrl(storagePath, 3600); // 1 hour expiry
+
+    if (urlError || !urlData) {
+      console.error('Error creating signed URL for media:', urlError);
+      return null;
+    }
+
+    return urlData.signedUrl;
+  } catch (error) {
+    console.error('Error in getPersonMediaUrl:', error);
+    return null;
+  }
+};
+
+/**
+ * Upload a media file for a person
+ */
+export const uploadPersonMedia = async (
+  personId: string,
+  fileUri: string,
+  caption?: string,
+  takenAt?: string
+): Promise<PersonMedia | null> => {
+  try {
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) {
+      throw new Error('User not authenticated');
+    }
+
+    const { data: treeId, error: treeIdError } = await supabase
+      .rpc('get_person_tree_id', { p_person_id: personId });
+
+    if (treeIdError || !treeId) {
+      throw new Error('Could not find tree_id for person');
+    }
+
+    // Read file as base64
+    const base64 = await FileSystem.readAsStringAsync(fileUri, {
+      encoding: FileSystem.EncodingType.Base64,
+    });
+
+    // Get file extension from URI
+    const fileExt = fileUri.split('.').pop() || 'jpg';
+    const mimeType = fileExt === 'png' ? 'image/png' : 'image/jpeg';
+
+    const supabaseUrl = import.meta.env.VITE_SUPABASE_URL || process.env.EXPO_PUBLIC_SUPABASE_URL;
+    if (!supabaseUrl) {
+      throw new Error('Supabase URL is not configured');
+    }
+
+    const { data: { session } } = await supabase.auth.getSession();
+    if (!session) {
+      throw new Error('No active session');
+    }
+
+    const edgeFunctionUrl = `${supabaseUrl}/functions/v1/upload_person_photo`;
+    const response = await fetch(edgeFunctionUrl, {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${session.access_token}`,
+        'apikey': import.meta.env.VITE_SUPABASE_ANON_KEY || process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY || '',
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        file_base64: base64,
+        file_name: `photo_${Date.now()}.${fileExt}`,
+        mime_type: mimeType,
+        tree_id: treeId,
+        person_id: personId,
+      }),
+    });
+
+    if (!response.ok) {
+      const errorData = await response.json().catch(() => ({ error: 'Unknown error' }));
+      throw new Error(errorData.error || `Upload failed with status ${response.status}`);
+    }
+
+    const result = await response.json();
+    const storagePath = result.storage_path;
+
+    if (!storagePath) {
+      throw new Error('Edge Function did not return storage_path');
+    }
+
+    // Add media record (non-primary)
+    const { data: mediaData, error: mediaError } = await supabase
+      .rpc('add_person_media', {
+        p_person_id: personId,
+        p_storage_path: storagePath,
+        p_caption: caption || null,
+        p_taken_at: takenAt || null,
+      });
+
+    if (mediaError) {
+      throw mediaError;
+    }
+
+    if (!mediaData || mediaData.length === 0) {
+      throw new Error('Failed to create media record');
+    }
+
+    return mediaData[0] as PersonMedia;
+  } catch (error) {
+    console.error('Error uploading media:', error);
+    return null;
+  }
+};
+
+/**
+ * Delete a media item
+ */
+export const deletePersonMedia = async (mediaId: string): Promise<boolean> => {
+  try {
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) {
+      throw new Error('User not authenticated');
+    }
+
+    const { data, error } = await supabase
+      .rpc('delete_person_media', { p_media_id: mediaId });
+
+    if (error) {
+      console.error('Error deleting media:', error);
+      return false;
+    }
+
+    return data === true;
+  } catch (error) {
+    console.error('Error in deletePersonMedia:', error);
+    return false;
+  }
+};
+
+/**
+ * Get user's role in a tree
+ */
+export const getUserTreeRole = async (treeId: string): Promise<'owner' | 'editor' | 'viewer' | null> => {
+  try {
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) return null;
+
+    const trees = await getUserTrees();
+    const tree = trees.find(t => t.id === treeId);
+    
+    if (!tree) return null;
+    
+    return tree.role as 'owner' | 'editor' | 'viewer';
+  } catch (error) {
+    console.error('Error in getUserTreeRole:', error);
+    return null;
+  }
+};
+
+/**
+ * Get self person ID by matching user email with person contacts
+ */
+export const getSelfPersonId = async (_treeId: string, personIds: string[]): Promise<string | null> => {
+  try {
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user || !user.email) {
+      console.log('🔍 getSelfPersonId: No user authenticated or no email');
+      return null;
+    }
+
+    const userEmail = user.email.toLowerCase().trim();
+    console.log('🔍 getSelfPersonId: Looking for person with email:', userEmail, 'in', personIds.length, 'persons');
+
+    // Check each person's contacts to find matching email
+    for (const personId of personIds) {
+      try {
+        const contacts = await getPersonContacts(personId);
+        const emailContacts = contacts.filter(c => c.type === 'email');
+        
+        for (const contact of emailContacts) {
+          const contactEmail = contact.value.toLowerCase().trim();
+          if (contactEmail === userEmail) {
+            console.log('✅ getSelfPersonId: Found self person by email:', personId, 'Email:', contactEmail);
+            return personId;
+          }
+        }
+      } catch (error) {
+        console.error('Error checking contacts for person', personId, ':', error);
+      }
+    }
+
+    console.log('⚠️ getSelfPersonId: No person found with email:', userEmail);
+    return null;
+  } catch (error) {
+    console.error('Error in getSelfPersonId:', error);
+    return null;
   }
 };
 

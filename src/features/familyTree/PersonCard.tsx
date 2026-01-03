@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { View, StyleSheet, TouchableOpacity, Image } from 'react-native';
+import { View, StyleSheet, TouchableOpacity, Image, Text as RNText } from 'react-native';
 import { Text } from '../../components/ui/Text';
 import { useTheme } from '../../design-system/ThemeProvider';
 import { Person } from '../../store/familyTreeStore';
@@ -10,6 +10,9 @@ interface PersonCardProps {
   onPress: (personId: string) => void;
   isSelected?: boolean;
   disableTouch?: boolean; // Disable TouchableOpacity for drag operations
+  isSelf?: boolean;
+  onHide?: (personId: string) => void;
+  canEdit?: boolean;
 }
 
 const AVATAR_SIZE = 60;
@@ -29,6 +32,9 @@ export const PersonCard: React.FC<PersonCardProps> = ({
   onPress,
   isSelected = false,
   disableTouch = false,
+  isSelf = false,
+  onHide,
+  canEdit = false,
 }) => {
   const { theme } = useTheme();
   const [photoUrl, setPhotoUrl] = useState<string | null>(null);
@@ -56,11 +62,46 @@ export const PersonCard: React.FC<PersonCardProps> = ({
     ? (lastName || 'Sans nom')
     : `${firstName} ${lastName}`.trim() || 'Sans nom';
   const dates = person.birthYear
-    ? `${person.birthYear}${person.deathYear ? `-${person.deathYear}` : '-'}`
+    ? `${person.birthYear}${person.deathYear ? `-${person.deathYear}` : ''}`
     : '';
+
+  // Determine border color based on gender
+  const getBorderColor = (): string => {
+    if (isSelected) {
+      return theme.colors.primary;
+    }
+    if (person.gender === 'male') {
+      return '#3b82f6'; // Blue
+    }
+    if (person.gender === 'female') {
+      return '#ec4899'; // Pink
+    }
+    return 'transparent';
+  };
+
+  const borderColor = getBorderColor();
+  const borderWidth = person.gender === 'male' || person.gender === 'female' ? 3 : (isSelected ? 2.5 : 0);
+
+  const handleHidePress = (e: any) => {
+    e.stopPropagation();
+    if (onHide) {
+      onHide(person.id);
+    }
+  };
 
   const cardContent = (
     <>
+      {/* Hide button */}
+      {canEdit && onHide && (
+        <TouchableOpacity
+          style={styles.hideButton}
+          onPress={handleHidePress}
+          activeOpacity={0.7}
+        >
+          <RNText style={styles.hideButtonText}>×</RNText>
+        </TouchableOpacity>
+      )}
+
       {/* Avatar */}
       <View style={styles.avatarContainer}>
         {photoUrl ? (
@@ -88,7 +129,11 @@ export const PersonCard: React.FC<PersonCardProps> = ({
       <Text
         variant="body"
         weight="semibold"
-        style={[styles.name, { color: '#1A1A1A' }]}
+        style={[
+          styles.name,
+          { color: isSelf ? '#dc2626' : '#1A1A1A' },
+          isSelf && styles.nameSelf,
+        ]}
         numberOfLines={2}
       >
         {fullName}
@@ -117,8 +162,8 @@ export const PersonCard: React.FC<PersonCardProps> = ({
       shadowOpacity: isSelected ? 0.2 : 0.1,
       shadowRadius: isSelected ? 10 : 8,
       elevation: isSelected ? 6 : 3,
-      borderWidth: isSelected ? 2.5 : 0,
-      borderColor: isSelected ? theme.colors.primary : 'transparent',
+      borderWidth,
+      borderColor,
       transform: [{ scale: isSelected ? 1.03 : 1 }],
     },
   ];
@@ -133,14 +178,14 @@ export const PersonCard: React.FC<PersonCardProps> = ({
       activeOpacity={0.7}
       style={cardStyle}
       onPress={() => {
-        console.log('🎯 PersonCard pressed:', person.id, person.firstName, person.lastName);
+        // console.log('🎯 PersonCard pressed:', person.id, person.firstName, person.lastName);
         onPress(person.id);
       }}
       onPressIn={() => {
-        console.log('👆 Card TouchableOpacity press IN:', person.firstName, person.lastName);
+        // console.log('👆 Card TouchableOpacity press IN:', person.firstName, person.lastName);
       }}
       onPressOut={() => {
-        console.log('👋 Card TouchableOpacity press OUT:', person.firstName, person.lastName);
+        // console.log('👋 Card TouchableOpacity press OUT:', person.firstName, person.lastName);
       }}
     >
       {cardContent}
@@ -157,6 +202,30 @@ const styles = StyleSheet.create({
     paddingHorizontal: 10,
     alignItems: 'center',
     justifyContent: 'flex-start',
+    position: 'relative',
+  },
+  hideButton: {
+    position: 'absolute',
+    top: 4,
+    right: 4,
+    width: 24,
+    height: 24,
+    borderRadius: 12,
+    backgroundColor: 'rgba(255, 255, 255, 0.9)',
+    alignItems: 'center',
+    justifyContent: 'center',
+    zIndex: 10,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.2,
+    shadowRadius: 3,
+    elevation: 3,
+  },
+  hideButtonText: {
+    fontSize: 18,
+    color: '#666',
+    fontWeight: 'bold',
+    lineHeight: 20,
   },
   avatarContainer: {
     marginBottom: 8,
@@ -186,6 +255,10 @@ const styles = StyleSheet.create({
     textAlign: 'center',
     marginBottom: 5,
     lineHeight: 18,
+  },
+  nameSelf: {
+    color: '#dc2626',
+    fontWeight: '700',
   },
   dates: {
     fontSize: 12,

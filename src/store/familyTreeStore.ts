@@ -9,6 +9,10 @@ export interface Person {
   lastName: string;
   birthYear?: number;
   deathYear?: number;
+  birthDate?: string; // Format: YYYY-MM-DD
+  deathDate?: string; // Format: YYYY-MM-DD
+  gender?: string; // 'male' or 'female'
+  isVisible?: boolean; // Controls visibility in tree view
   parentIds: string[];
   partnerId?: string;
   childrenIds: string[];

@@ -8,6 +8,7 @@ import {
   Pressable,
   Alert,
   ActivityIndicator,
+  Switch,
 } from 'react-native';
 import { useRoute, useNavigation, RouteProp } from '@react-navigation/native';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
@@ -28,6 +29,13 @@ import {
   getTreeData,
   isSelfPerson,
   deletePerson,
+  getPersonMedia,
+  getPersonMediaUrl,
+  uploadPersonMedia,
+  deletePersonMedia,
+  PersonMedia,
+  setPersonVisibility,
+  getUserTreeRole,
 } from '../services/treeService';
 import { AddRelativeModal } from '../components/AddRelativeModal';
 import { LinkExistingPersonModal } from '../components/LinkExistingPersonModal';
@@ -72,6 +80,7 @@ export const PersonDetailScreen: React.FC = () => {
   const [isUploadingPhoto, setIsUploadingPhoto] = useState(false);
   const [isSelf, setIsSelf] = useState(false);
   const [isDeleting, setIsDeleting] = useState(false);
+  const [canEdit, setCanEdit] = useState(false);
 
   const person = personId ? getPerson(personId) : null;
   const details = personId ? getPersonDetails(personId) : null;
@@ -97,6 +106,25 @@ export const PersonDetailScreen: React.FC = () => {
       setIsSelf(false);
     }
   };
+
+  // Check user permissions
+  React.useEffect(() => {
+    const checkPermissions = async () => {
+      if (!personId) return;
+      try {
+        const { data: treeId } = await supabase.rpc('get_person_tree_id', { p_person_id: personId });
+        if (treeId) {
+          const role = await getUserTreeRole(treeId);
+          const canEditTree = role === 'owner' || role === 'editor';
+          setCanEdit(canEditTree);
+        }
+      } catch (error) {
+        console.error('Error checking permissions:', error);
+        setCanEdit(false);
+      }
+    };
+    checkPermissions();
+  }, [personId]);
 
   // Load person photo
   const loadPhoto = async () => {
@@ -648,8 +676,8 @@ export const PersonDetailScreen: React.FC = () => {
             />
           )}
           {activeTab === 'events' && <EventsTab person={person} details={details} />}
-          {activeTab === 'media' && <MediaTab person={person} details={details} />}
-          {activeTab === 'relatives' && <RelativesTab person={person} />}
+          {activeTab === 'media' && <MediaTab person={person} details={details} canEdit={canEdit} />}
+          {activeTab === 'relatives' && <RelativesTab person={person} canEdit={canEdit} />}
         </View>
       </ScrollView>
     </Screen>
@@ -1028,22 +1056,124 @@ const EventsTab: React.FC<{ person: any; details: any }> = ({ details }) => {
 };
 
 // Media Tab Component
-const MediaTab: React.FC<{ person: any; details: any }> = ({ person, details }) => {
+const MediaTab: React.FC<{ person: any; details: any; canEdit: boolean }> = ({ person, details, canEdit }) => {
   const { t } = useTranslation();
+  const { theme } = useTheme();
+  const [media, setMedia] = useState<PersonMedia[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [uploading, setUploading] = useState(false);
 
-  if (!details || !details.media || details.media.length === 0) {
+  React.useEffect(() => {
+    if (person?.id) {
+      loadMedia();
+    }
+  }, [person?.id]);
+
+  const loadMedia = async () => {
+    if (!person?.id) return;
+    try {
+      setLoading(true);
+      const mediaList = await getPersonMedia(person.id);
+      setMedia(mediaList);
+    } catch (error) {
+      console.error('Error loading media:', error);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleFileSelect = async () => {
+    if (!canEdit || !person?.id) return;
+
+    try {
+      const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
+      if (status !== 'granted') {
+        Alert.alert('Permission requise', 'Veuillez autoriser l\'accès à la galerie photo');
+        return;
+      }
+
+      const result = await ImagePicker.launchImageLibraryAsync({
+        mediaTypes: ['images'],
+        allowsEditing: true,
+        quality: 0.8,
+      });
+
+      if (!result.canceled && result.assets && result.assets.length > 0) {
+        const asset = result.assets[0];
+        setUploading(true);
+        const newMedia = await uploadPersonMedia(person.id, asset.uri);
+        if (newMedia) {
+          await loadMedia();
+          Alert.alert('Succès', 'Photo ajoutée avec succès');
+        } else {
+          Alert.alert('Erreur', 'Erreur lors de l\'ajout de la photo');
+        }
+      }
+    } catch (error: any) {
+      console.error('Error uploading media:', error);
+      Alert.alert('Erreur', `Erreur lors de l'ajout de la photo: ${error.message || 'Erreur inconnue'}`);
+    } finally {
+      setUploading(false);
+    }
+  };
+
+  const handleDeleteMedia = async (mediaId: string) => {
+    if (!canEdit) return;
+
+    Alert.alert(
+      'Confirmation',
+      'Êtes-vous sûr de vouloir supprimer cette photo ?',
+      [
+        { text: 'Annuler', style: 'cancel' },
+        {
+          text: 'Supprimer',
+          style: 'destructive',
+          onPress: async () => {
+            try {
+              const success = await deletePersonMedia(mediaId);
+              if (success) {
+                await loadMedia();
+                Alert.alert('Succès', 'Photo supprimée avec succès');
+              } else {
+                Alert.alert('Erreur', 'Erreur lors de la suppression de la photo');
+              }
+            } catch (error: any) {
+              console.error('Error deleting media:', error);
+              Alert.alert('Erreur', `Erreur lors de la suppression de la photo: ${error.message || 'Erreur inconnue'}`);
+            }
+          },
+        },
+      ]
+    );
+  };
+
+  if (loading) {
+    return (
+      <View style={styles.emptyState}>
+        <ActivityIndicator size="large" color={theme.colors.primary} />
+        <Spacer size="md" />
+        <Text>{t('common.loading') || 'Chargement...'}</Text>
+      </View>
+    );
+  }
+
+  if (media.length === 0) {
     return (
       <View style={styles.emptyState}>
         <Card variant="elevated" padding="lg" style={styles.emptyMediaCard}>
           <Text style={styles.emptyMediaText}>
-            {t('person.noPhotos')} {person.firstName} {person.lastName}
+            {t('person.noPhotos')} {person?.firstName} {person?.lastName}
           </Text>
           <Spacer size="md" />
           <Text style={styles.emptyMediaSubtext}>{t('person.addPhotos')}</Text>
-          <Spacer size="md" />
-          <Button variant="primary" onPress={() => {}}>
-            {t('person.addPhotos')}
-          </Button>
+          {canEdit && (
+            <>
+              <Spacer size="md" />
+              <Button variant="primary" onPress={handleFileSelect} disabled={uploading}>
+                {uploading ? t('person.uploadingPhoto') || 'Upload en cours...' : t('person.addPhotos')}
+              </Button>
+            </>
+          )}
         </Card>
       </View>
     );
@@ -1051,20 +1181,90 @@ const MediaTab: React.FC<{ person: any; details: any }> = ({ person, details }) 
 
   return (
     <View style={styles.tabContentInner}>
-      <Text style={styles.sectionTitle}>
-        {details.media.length} {t('person.media')}
-      </Text>
-      {/* Media grid would go here */}
+      {canEdit && (
+        <View style={{ marginBottom: 16 }}>
+          <Button variant="primary" onPress={handleFileSelect} disabled={uploading}>
+            {uploading ? t('person.uploadingPhoto') || 'Upload en cours...' : t('person.addPhotos')}
+          </Button>
+        </View>
+      )}
+      <View style={styles.mediaGrid}>
+        {media.map((item) => (
+          <MediaItem
+            key={item.id}
+            media={item}
+            onDelete={canEdit ? () => handleDeleteMedia(item.id) : undefined}
+          />
+        ))}
+      </View>
+    </View>
+  );
+};
+
+interface MediaItemProps {
+  media: PersonMedia;
+  onDelete?: () => void;
+}
+
+const MediaItem: React.FC<MediaItemProps> = ({ media, onDelete }) => {
+  const { t } = useTranslation();
+  const [imageUrl, setImageUrl] = useState<string | null>(null);
+  const [loading, setLoading] = useState(true);
+
+  React.useEffect(() => {
+    loadImageUrl();
+  }, [media.storage_path]);
+
+  const loadImageUrl = async () => {
+    try {
+      setLoading(true);
+      const url = await getPersonMediaUrl(media.storage_path);
+      setImageUrl(url);
+    } catch (error) {
+      console.error('Error loading media URL:', error);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  return (
+    <View style={styles.mediaItem}>
+      {loading ? (
+        <View style={styles.mediaItemPlaceholder}>
+          <ActivityIndicator size="small" />
+        </View>
+      ) : imageUrl ? (
+        <Image source={{ uri: imageUrl }} style={styles.mediaItemImage} resizeMode="cover" />
+      ) : (
+        <View style={styles.mediaItemPlaceholder}>
+          <Text>Erreur de chargement</Text>
+        </View>
+      )}
+      {media.caption && (
+        <Text style={styles.mediaItemCaption} numberOfLines={2}>
+          {media.caption}
+        </Text>
+      )}
+      {onDelete && (
+        <TouchableOpacity style={styles.mediaItemDelete} onPress={onDelete}>
+          <Text style={styles.mediaItemDeleteText}>×</Text>
+        </TouchableOpacity>
+      )}
+      {media.is_primary && (
+        <View style={styles.mediaItemPrimaryBadge}>
+          <Text style={styles.mediaItemPrimaryBadgeText}>{t('person.primaryPhoto') || 'Photo principale'}</Text>
+        </View>
+      )}
     </View>
   );
 };
 
 // Relatives Tab Component
-const RelativesTab: React.FC<{ person: any }> = ({ person }) => {
+const RelativesTab: React.FC<{ person: any; canEdit: boolean }> = ({ person, canEdit }) => {
   const { t } = useTranslation();
   const navigation = useNavigation<NavigationProp>();
   const { theme } = useTheme();
-  const { getPerson, getAllPersons, setPersons } = useFamilyTreeStore();
+  const { getPerson, getAllPersons, setPersons, updatePerson: updatePersonInStore } = useFamilyTreeStore();
   
   const [showAddParentModal, setShowAddParentModal] = useState(false);
   const [showAddChildModal, setShowAddChildModal] = useState(false);
@@ -1116,7 +1316,28 @@ const RelativesTab: React.FC<{ person: any }> = ({ person }) => {
     }
   };
 
-  const renderPersonCard = (p: any, relation: string) => (
+  const handleToggleVisibility = async (personId: string, isVisible: boolean) => {
+    if (!canEdit) return;
+    
+    try {
+      const success = await setPersonVisibility(personId, isVisible);
+      if (success) {
+        // Update person in store immediately (optimistic update)
+        const personData = getPerson(personId);
+        if (personData) {
+          updatePersonInStore(personId, { isVisible });
+        }
+        Alert.alert('Succès', isVisible ? 'Carte rendue visible' : 'Carte masquée');
+      } else {
+        Alert.alert('Erreur', 'Erreur lors de la mise à jour de la visibilité');
+      }
+    } catch (error: any) {
+      console.error('Error toggling visibility:', error);
+      Alert.alert('Erreur', `Erreur lors de la mise à jour: ${error.message || 'Erreur inconnue'}`);
+    }
+  };
+
+  const renderPersonCard = (p: any, relation: string, relationType: 'parent' | 'partner' | 'child') => (
     <Pressable key={p.id} onPress={() => handlePersonPress(p.id)}>
       <Card variant="elevated" padding="md" style={styles.relativeCard}>
         <View style={styles.relativeCardContent}>
@@ -1135,6 +1356,19 @@ const RelativesTab: React.FC<{ person: any }> = ({ person }) => {
               </Text>
             )}
           </View>
+          {canEdit && (
+            <View style={styles.relativeActions}>
+              <View style={styles.visibilityToggle}>
+                <Switch
+                  value={p.isVisible !== false}
+                  onValueChange={(value) => handleToggleVisibility(p.id, value)}
+                />
+                <Text style={styles.visibilityLabel}>
+                  {p.isVisible !== false ? 'Visible' : 'Invisible'}
+                </Text>
+              </View>
+            </View>
+          )}
         </View>
       </Card>
     </Pressable>
@@ -1146,7 +1380,7 @@ const RelativesTab: React.FC<{ person: any }> = ({ person }) => {
         <>
           <Text style={styles.sectionTitle}>{t('person.parents')}</Text>
           <Spacer size="sm" />
-          {parents.map((p: any) => renderPersonCard(p, t('person.parents')))}
+          {parents.map((p: any) => renderPersonCard(p, t('person.parents'), 'parent'))}
           <Spacer size="md" />
         </>
       )}
@@ -1155,7 +1389,7 @@ const RelativesTab: React.FC<{ person: any }> = ({ person }) => {
         <>
           <Text style={styles.sectionTitle}>{t('person.partner')}</Text>
           <Spacer size="sm" />
-          {renderPersonCard(partner, t('person.partner'))}
+          {renderPersonCard(partner, t('person.partner'), 'partner')}
           <Spacer size="md" />
         </>
       )}
@@ -1164,7 +1398,7 @@ const RelativesTab: React.FC<{ person: any }> = ({ person }) => {
         <>
           <Text style={styles.sectionTitle}>{t('person.children')}</Text>
           <Spacer size="sm" />
-          {children.map((p: any) => renderPersonCard(p, t('person.children')))}
+          {children.map((p: any) => renderPersonCard(p, t('person.children'), 'child'))}
           <Spacer size="md" />
         </>
       )}
@@ -1737,5 +1971,94 @@ const styles = StyleSheet.create({
   notesInput: {
     minHeight: 100,
     textAlignVertical: 'top',
+  },
+
+  mediaGrid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 12,
+  },
+
+  mediaItem: {
+    width: '48%',
+    aspectRatio: 1,
+    borderRadius: 12,
+    overflow: 'hidden',
+    backgroundColor: '#F5F5F5',
+    position: 'relative',
+  },
+
+  mediaItemImage: {
+    width: '100%',
+    height: '100%',
+  },
+
+  mediaItemPlaceholder: {
+    width: '100%',
+    height: '100%',
+    justifyContent: 'center',
+    alignItems: 'center',
+    backgroundColor: '#F5F5F5',
+  },
+
+  mediaItemCaption: {
+    position: 'absolute',
+    bottom: 0,
+    left: 0,
+    right: 0,
+    backgroundColor: 'rgba(0, 0, 0, 0.6)',
+    color: '#FFFFFF',
+    padding: 8,
+    fontSize: 12,
+  },
+
+  mediaItemDelete: {
+    position: 'absolute',
+    top: 8,
+    right: 8,
+    width: 28,
+    height: 28,
+    borderRadius: 14,
+    backgroundColor: 'rgba(255, 255, 255, 0.9)',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+
+  mediaItemDeleteText: {
+    fontSize: 20,
+    color: '#666',
+    fontWeight: 'bold',
+  },
+
+  mediaItemPrimaryBadge: {
+    position: 'absolute',
+    top: 8,
+    left: 8,
+    backgroundColor: 'rgba(25, 118, 210, 0.9)',
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 4,
+  },
+
+  mediaItemPrimaryBadgeText: {
+    color: '#FFFFFF',
+    fontSize: 10,
+    fontWeight: '600',
+  },
+
+  relativeActions: {
+    marginLeft: 12,
+    alignItems: 'flex-end',
+  },
+
+  visibilityToggle: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+
+  visibilityLabel: {
+    fontSize: 12,
+    color: '#666666',
   },
 });
