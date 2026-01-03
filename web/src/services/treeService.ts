@@ -1,0 +1,1146 @@
+import { supabase } from '../lib/supabase';
+import { Person, PersonPosition } from '../store/familyTreeStore';
+
+export interface Profile {
+  id: string;
+  display_name: string | null;
+  avatar_url: string | null;
+  locale: string;
+  theme: string;
+}
+
+export interface Tree {
+  id: string;
+  owner_id: string;
+  name: string;
+  description: string | null;
+  role: string;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface PersonDB {
+  id: string;
+  tree_id: string;
+  created_by: string | null;
+  first_name: string | null;
+  last_name: string | null;
+  display_name: string | null;
+  gender: string | null;
+  is_living: boolean;
+  is_visible: boolean;
+  birth_date: string | null;
+  death_date: string | null;
+  notes: string | null;
+  main_photo_id: string | null;
+  created_at: string;
+  updated_at: string;
+  deleted_at: string | null;
+}
+
+export interface RelationshipDB {
+  id: string;
+  tree_id: string;
+  from_person_id: string;
+  to_person_id: string;
+  type: 'parent' | 'partner';
+  notes: string | null;
+  created_at: string;
+}
+
+export const getCurrentUserProfile = async (): Promise<Profile | null> => {
+  try {
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) return null;
+
+    const { data, error } = await supabase.rpc('get_current_user_profile');
+
+    if (error) {
+      console.error('Error fetching profile:', error);
+      return null;
+    }
+
+    if (!data || data.length === 0) {
+      return null;
+    }
+
+    return data[0] as Profile;
+  } catch (error) {
+    console.error('Error in getCurrentUserProfile:', error);
+    return null;
+  }
+};
+
+export const autoJoinTreesByEmail = async (): Promise<{ success: boolean; treesJoined: number; message: string }> => {
+  try {
+    const { data, error } = await supabase.rpc('auto_join_trees_by_email');
+
+    if (error) {
+      console.error('Error auto-joining trees:', error);
+      return { success: false, treesJoined: 0, message: error.message };
+    }
+
+    const result = data as { success: boolean; trees_joined: number; message: string };
+    return {
+      success: result.success,
+      treesJoined: result.trees_joined || 0,
+      message: result.message || 'Aucun arbre trouvé',
+    };
+  } catch (error: any) {
+    console.error('Error in autoJoinTreesByEmail:', error);
+    return { success: false, treesJoined: 0, message: error.message || 'Erreur lors de la recherche d\'arbres' };
+  }
+};
+
+export const getUserTrees = async (): Promise<Tree[]> => {
+  try {
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) return [];
+
+    // First, try to auto-join trees where user's email appears
+    const autoJoinResult = await autoJoinTreesByEmail();
+    if (autoJoinResult.treesJoined > 0) {
+      console.log(`✅ Auto-joined ${autoJoinResult.treesJoined} tree(s) by email`);
+    }
+
+    const { data, error } = await supabase.rpc('get_user_trees', { p_user_id: user.id });
+
+    if (error) {
+      console.error('Error fetching trees:', error);
+      return [];
+    }
+
+    return (data || []) as Tree[];
+  } catch (error) {
+    console.error('Error in getUserTrees:', error);
+    return [];
+  }
+};
+
+export const getTreeData = async (treeId: string): Promise<{
+  persons: Person[];
+  relationships: RelationshipDB[];
+}> => {
+  try {
+    const { data: personsData, error: personsError } = await supabase
+      .rpc('get_tree_persons', { p_tree_id: treeId });
+
+    if (personsError) {
+      console.error('Error fetching persons:', personsError);
+      return { persons: [], relationships: [] };
+    }
+
+    const { data: relationshipsData, error: relationshipsError } = await supabase
+      .rpc('get_tree_relationships', { p_tree_id: treeId });
+
+    if (relationshipsError) {
+      console.error('Error fetching relationships:', relationshipsError);
+      return { persons: [], relationships: [] };
+    }
+
+    const personsDB = (personsData || []) as PersonDB[];
+    const relationships = (relationshipsData || []) as RelationshipDB[];
+
+    const persons: Person[] = personsDB.map((p) => {
+      const parentRels = relationships.filter(
+        (r) => r.to_person_id === p.id && r.type === 'parent'
+      );
+      const parentIds = parentRels.map((r) => r.from_person_id);
+
+      const childRels = relationships.filter(
+        (r) => r.from_person_id === p.id && r.type === 'parent'
+      );
+      const childrenIds = childRels.map((r) => r.to_person_id);
+
+      const partnerRel = relationships.find(
+        (r) => (r.from_person_id === p.id || r.to_person_id === p.id) && r.type === 'partner'
+      );
+      const partnerId = partnerRel
+        ? (partnerRel.from_person_id === p.id ? partnerRel.to_person_id : partnerRel.from_person_id)
+        : undefined;
+
+      const birthYear = p.birth_date ? new Date(p.birth_date).getFullYear() : undefined;
+      const deathYear = p.death_date ? new Date(p.death_date).getFullYear() : undefined;
+      
+      // Extract date in YYYY-MM-DD format (keep full date, not just year)
+      const birthDate = p.birth_date ? p.birth_date.split('T')[0] : undefined;
+      const deathDate = p.death_date ? p.death_date.split('T')[0] : undefined;
+
+      return {
+        id: p.id,
+        firstName: p.first_name || p.display_name || '',
+        lastName: p.last_name || '',
+        birthYear,
+        deathYear,
+        birthDate,
+        deathDate,
+        gender: p.gender || undefined,
+        isVisible: p.is_visible !== undefined ? p.is_visible : true,
+        parentIds,
+        partnerId,
+        childrenIds,
+      };
+    });
+
+    return { persons, relationships };
+  } catch (error) {
+    console.error('Error in getTreeData:', error);
+    return { persons: [], relationships: [] };
+  }
+};
+
+export const createTree = async (name: string, description?: string): Promise<Tree | null> => {
+  try {
+    const { data, error } = await supabase.rpc('create_user_tree', {
+      p_name: name,
+      p_description: description || null,
+    });
+
+    if (error) {
+      console.error('Error creating tree:', error);
+      return null;
+    }
+
+    if (!data || data.length === 0) {
+      return null;
+    }
+
+    const treeData = data[0];
+    return {
+      ...treeData,
+      role: 'owner',
+    } as Tree;
+  } catch (error) {
+    console.error('Error in createTree:', error);
+    return null;
+  }
+};
+
+export const deleteTree = async (treeId: string): Promise<boolean> => {
+  try {
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) {
+      throw new Error('User not authenticated');
+    }
+
+    const { data, error } = await supabase.rpc('delete_tree', {
+      p_tree_id: treeId,
+    });
+
+    if (error) {
+      console.error('Error deleting tree:', error);
+      throw new Error(error.message || 'Erreur lors de la suppression de l\'arbre');
+    }
+
+    return data === true;
+  } catch (error: any) {
+    console.error('Error in deleteTree:', error);
+    throw error;
+  }
+};
+
+export const createPerson = async (
+  treeId: string,
+  firstName: string,
+  lastName: string,
+  displayName?: string,
+  birthDate?: Date,
+  gender?: string
+): Promise<Person | null> => {
+  try {
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) {
+      throw new Error('User not authenticated');
+    }
+
+    // Generate display name if not provided
+    const finalDisplayName = displayName || `${firstName} ${lastName}`.trim() || 'Nouvelle personne';
+
+    // Use RPC function (SECURITY DEFINER bypasses RLS and handles linking)
+    const { data: personDataArray, error: personError } = await supabase
+      .rpc('create_person_from_profile', {
+        p_tree_id: treeId,
+        p_first_name: firstName.trim(),
+        p_last_name: lastName.trim(),
+        p_display_name: finalDisplayName,
+      });
+
+    if (personError) {
+      console.error('Error creating person:', personError);
+      return null;
+    }
+
+    if (!personDataArray || personDataArray.length === 0) {
+      return null;
+    }
+
+    const personData = personDataArray[0];
+    const personId = personData.person_id || personData.id;
+
+    // If birth date or gender provided, update the person
+    if (birthDate || gender) {
+      const updateData: any = {};
+      if (birthDate) {
+        updateData.p_birth_date = birthDate.toISOString().split('T')[0]; // Format YYYY-MM-DD
+      }
+      if (gender) {
+        updateData.p_gender = gender;
+      }
+
+      const { error: updateError } = await supabase
+        .rpc('update_person', {
+          p_person_id: personId,
+          ...updateData,
+        });
+
+      if (updateError) {
+        console.error('Error updating person after creation:', updateError);
+        // Continue anyway, person was created
+      }
+    }
+
+    // Convert to app format
+    const person: Person = {
+      id: personId,
+      firstName: personData.first_name || firstName.trim(),
+      lastName: personData.last_name || lastName.trim(),
+      birthYear: birthDate ? birthDate.getFullYear() : undefined,
+      deathYear: undefined,
+      birthDate: birthDate ? birthDate.toISOString().split('T')[0] : undefined,
+      deathDate: undefined,
+      gender: gender || undefined,
+      parentIds: [],
+      partnerId: undefined,
+      childrenIds: [],
+    };
+
+    return person;
+  } catch (error) {
+    console.error('Error in createPerson:', error);
+    return null;
+  }
+};
+
+export const createRelationship = async (
+  _treeId: string,
+  fromPersonId: string,
+  toPersonId: string,
+  type: 'parent' | 'partner'
+): Promise<boolean> => {
+  try {
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) {
+      throw new Error('User not authenticated');
+    }
+
+    // Use create_person_relationship (same as mobile version)
+    // Note: The function gets tree_id from the persons, so we don't need to pass it
+    const { data, error } = await supabase
+      .rpc('create_person_relationship', {
+        p_from_person_id: fromPersonId,
+        p_to_person_id: toPersonId,
+        p_relationship_type: type,
+        p_notes: null,
+      });
+
+    if (error) {
+      console.error('Error creating relationship:', error);
+      return false;
+    }
+
+    return data && data.length > 0;
+  } catch (error) {
+    console.error('Error in createRelationship:', error);
+    return false;
+  }
+};
+
+export const deletePerson = async (personId: string): Promise<boolean> => {
+  try {
+    const { data, error } = await supabase.rpc('delete_person', { p_person_id: personId });
+
+    if (error) {
+      console.error('Error deleting person:', error);
+      return false;
+    }
+
+    return data === true;
+  } catch (error) {
+    console.error('Error in deletePerson:', error);
+    return false;
+  }
+};
+
+export const deleteRelationship = async (
+  fromPersonId: string,
+  toPersonId: string,
+  type: 'parent' | 'partner'
+): Promise<boolean> => {
+  try {
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) {
+      throw new Error('User not authenticated');
+    }
+
+    const { data, error } = await supabase.rpc('delete_person_relationship', {
+      p_from_person_id: fromPersonId,
+      p_to_person_id: toPersonId,
+      p_relationship_type: type,
+    });
+
+    if (error) {
+      console.error('Error deleting relationship:', error);
+      return false;
+    }
+
+    return data === true;
+  } catch (error) {
+    console.error('Error in deleteRelationship:', error);
+    return false;
+  }
+};
+
+export const savePersonPosition = async (
+  treeId: string,
+  personId: string,
+  x: number,
+  y: number
+): Promise<boolean> => {
+  try {
+    const { data, error } = await supabase.rpc('save_person_position', {
+      p_tree_id: treeId,
+      p_person_id: personId,
+      p_position_x: x,
+      p_position_y: y,
+    });
+
+    if (error) {
+      console.error('Error saving position:', error);
+      return false;
+    }
+
+    return data === true;
+  } catch (error) {
+    console.error('Error in savePersonPosition:', error);
+    return false;
+  }
+};
+
+export const getPersonPositions = async (treeId: string): Promise<PersonPosition[]> => {
+  try {
+    const { data, error } = await supabase.rpc('get_person_positions', {
+      p_tree_id: treeId,
+    });
+
+    if (error) {
+      console.error('Error getting person positions:', error);
+      return [];
+    }
+
+    return (data || []).map((pos: any) => ({
+      personId: pos.person_id,
+      x: pos.position_x,
+      y: pos.position_y,
+    }));
+  } catch (error) {
+    console.error('Error in getPersonPositions:', error);
+    return [];
+  }
+};
+
+export const getPersonPhotoUrl = async (personId: string): Promise<string | null> => {
+  try {
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) {
+      console.log('📸 No user authenticated for photo:', personId);
+      return null;
+    }
+
+    // Get storage path via RPC
+    const { data: storagePath, error: pathError } = await supabase
+      .rpc('get_person_photo_url', { p_person_id: personId });
+
+    if (pathError) {
+      console.error('📸 Error getting storage path for', personId, ':', pathError);
+      return null;
+    }
+
+    if (!storagePath) {
+      // No photo for this person - this is normal
+      return null;
+    }
+
+    console.log('📸 Found storage path for', personId, ':', storagePath);
+
+    // Create signed URL for private bucket
+    const { data: urlData, error: urlError } = await supabase.storage
+      .from('family-tree-media')
+      .createSignedUrl(storagePath, 3600); // 1 hour expiry
+
+    if (urlError) {
+      console.error('📸 Error creating signed URL for', personId, ':', urlError);
+      return null;
+    }
+
+    if (!urlData || !urlData.signedUrl) {
+      console.error('📸 No signed URL data returned for', personId);
+      return null;
+    }
+
+    console.log('📸 Successfully created signed URL for', personId);
+    return urlData.signedUrl;
+  } catch (error) {
+    console.error('📸 Error in getPersonPhotoUrl for', personId, ':', error);
+    return null;
+  }
+};
+
+export interface ContactDB {
+  id: string;
+  person_id: string;
+  type: 'email' | 'mobile' | 'social' | 'website' | 'other';
+  label: string | null;
+  value: string;
+  is_primary: boolean;
+  visibility: 'private' | 'tree' | 'shared';
+  created_at: string;
+}
+
+export interface ShareTreeResult {
+  success: boolean;
+  status: 'active' | 'invited';
+  message: string;
+  person_id?: string;
+  person_name?: string;
+  user_id?: string;
+}
+
+export const setPersonVisibility = async (
+  personId: string,
+  isVisible: boolean
+): Promise<boolean> => {
+  try {
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) {
+      throw new Error('User not authenticated');
+    }
+
+    const { data, error } = await supabase
+      .rpc('set_person_visibility', {
+        p_person_id: personId,
+        p_is_visible: isVisible,
+      });
+
+    if (error) {
+      console.error('Error setting person visibility:', error);
+      return false;
+    }
+
+    return data === true;
+  } catch (error) {
+    console.error('Error in setPersonVisibility:', error);
+    return false;
+  }
+};
+
+export const updatePerson = async (
+  personId: string,
+  updates: {
+    firstName?: string;
+    lastName?: string;
+    displayName?: string;
+    birthDate?: string | null;
+    deathDate?: string | null;
+    gender?: string;
+    isLiving?: boolean;
+    isVisible?: boolean;
+    notes?: string;
+  }
+): Promise<Person | null> => {
+  try {
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) {
+      throw new Error('User not authenticated');
+    }
+
+    const { data: personDataArray, error: personError } = await supabase
+      .rpc('update_person', {
+        p_person_id: personId,
+        p_first_name: updates.firstName,
+        p_last_name: updates.lastName,
+        p_display_name: updates.displayName,
+        p_birth_date: updates.birthDate || null,
+        p_death_date: updates.deathDate || null,
+        p_gender: updates.gender,
+        p_is_living: updates.isLiving,
+        p_is_visible: updates.isVisible !== undefined ? updates.isVisible : null,
+        p_notes: updates.notes,
+      });
+
+    if (personError) {
+      console.error('Error updating person:', personError);
+      return null;
+    }
+
+    if (!personDataArray || personDataArray.length === 0) {
+      return null;
+    }
+
+    const personData = personDataArray[0];
+    const birthYear = personData.birth_date ? new Date(personData.birth_date).getFullYear() : undefined;
+    const deathYear = personData.death_date ? new Date(personData.death_date).getFullYear() : undefined;
+    const birthDate = personData.birth_date ? personData.birth_date.split('T')[0] : undefined;
+    const deathDate = personData.death_date ? personData.death_date.split('T')[0] : undefined;
+    
+    return {
+      id: personData.person_id || personData.id,
+      firstName: personData.first_name || '',
+      lastName: personData.last_name || '',
+      birthYear,
+      deathYear,
+      birthDate,
+      deathDate,
+      gender: personData.gender || undefined,
+      isVisible: personData.is_visible !== undefined ? personData.is_visible : true,
+      parentIds: [],
+      partnerId: undefined,
+      childrenIds: [],
+    };
+  } catch (error) {
+    console.error('Error in updatePerson:', error);
+    return null;
+  }
+};
+
+export const getPersonContacts = async (personId: string): Promise<ContactDB[]> => {
+  try {
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) {
+      throw new Error('User not authenticated');
+    }
+
+    const { data, error } = await supabase
+      .rpc('get_person_contacts', { p_person_id: personId });
+
+    if (error) {
+      console.error('Error fetching contacts:', error);
+      return [];
+    }
+
+    return (data || []) as ContactDB[];
+  } catch (error) {
+    console.error('Error in getPersonContacts:', error);
+    return [];
+  }
+};
+
+export const checkEmailUniqueInTree = async (
+  treeId: string,
+  email: string,
+  excludePersonId?: string
+): Promise<boolean> => {
+  try {
+    const { data, error } = await supabase.rpc('check_email_unique_in_tree', {
+      p_tree_id: treeId,
+      p_email: email.trim().toLowerCase(),
+      p_exclude_person_id: excludePersonId || null,
+    });
+
+    if (error) {
+      console.error('Error checking email uniqueness:', error);
+      return false;
+    }
+
+    return data === true;
+  } catch (error) {
+    console.error('Error in checkEmailUniqueInTree:', error);
+    return false;
+  }
+};
+
+export const upsertPersonContact = async (
+  personId: string,
+  type: 'email' | 'mobile' | 'social' | 'website' | 'other',
+  value: string,
+  label?: string,
+  isPrimary: boolean = false,
+  visibility: 'private' | 'tree' | 'shared' = 'tree'
+): Promise<ContactDB | null> => {
+  try {
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) {
+      throw new Error('User not authenticated');
+    }
+
+    // Validate email uniqueness on client side before sending
+    if (type === 'email' && value.trim()) {
+      // Get tree_id from person
+      const { data: treeIdData, error: treeIdError } = await supabase
+        .rpc('get_person_tree_id', { p_person_id: personId });
+
+      if (!treeIdError && treeIdData) {
+        const isUnique = await checkEmailUniqueInTree(treeIdData, value, personId);
+        if (!isUnique) {
+          throw new Error('Cette adresse email est déjà utilisée dans cet arbre par une autre personne');
+        }
+      }
+    }
+
+    const { data, error } = await supabase
+      .rpc('upsert_person_contact', {
+        p_person_id: personId,
+        p_type: type,
+        p_value: value,
+        p_label: label || null,
+        p_is_primary: isPrimary,
+        p_visibility: visibility,
+      });
+
+    if (error) {
+      // Check if error is about email uniqueness
+      if (error.message && error.message.includes('déjà utilisée')) {
+        throw new Error(error.message);
+      }
+      console.error('Error upserting contact:', error);
+      return null;
+    }
+
+    if (!data || data.length === 0) {
+      return null;
+    }
+
+    const contact = data[0];
+    return {
+      id: contact.contact_id,
+      person_id: contact.contact_person_id,
+      type: contact.contact_type,
+      label: contact.contact_label,
+      value: contact.contact_value,
+      is_primary: contact.contact_is_primary,
+      visibility: contact.contact_visibility,
+      created_at: contact.created_at,
+    } as ContactDB;
+  } catch (error) {
+    console.error('Error in upsertPersonContact:', error);
+    throw error; // Re-throw to allow caller to handle the error
+  }
+};
+
+export const uploadPersonPhoto = async (
+  personId: string,
+  file: File
+): Promise<string | null> => {
+  try {
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) {
+      throw new Error('User not authenticated');
+    }
+
+    const { data: treeId, error: treeIdError } = await supabase
+      .rpc('get_person_tree_id', { p_person_id: personId });
+
+    if (treeIdError || !treeId) {
+      throw new Error('Could not find tree_id for person');
+    }
+
+    // Convert file to base64
+    const reader = new FileReader();
+    const base64 = await new Promise<string>((resolve, reject) => {
+      reader.onload = () => {
+        const result = reader.result as string;
+        const base64Data = result.split(',')[1];
+        resolve(base64Data);
+      };
+      reader.onerror = reject;
+      reader.readAsDataURL(file);
+    });
+
+    const fileExt = file.name.split('.').pop() || 'jpg';
+    const mimeType = file.type || (fileExt === 'png' ? 'image/png' : 'image/jpeg');
+
+    const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
+    if (!supabaseUrl) {
+      throw new Error('VITE_SUPABASE_URL is not configured');
+    }
+
+    const { data: { session } } = await supabase.auth.getSession();
+    if (!session) {
+      throw new Error('No active session');
+    }
+
+    const edgeFunctionUrl = `${supabaseUrl}/functions/v1/upload_person_photo`;
+    const response = await fetch(edgeFunctionUrl, {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${session.access_token}`,
+        'apikey': import.meta.env.VITE_SUPABASE_ANON_KEY || '',
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        file_base64: base64,
+        file_name: `photo.${fileExt}`,
+        mime_type: mimeType,
+        tree_id: treeId,
+        person_id: personId,
+      }),
+    });
+
+    if (!response.ok) {
+      const errorData = await response.json().catch(() => ({ error: 'Unknown error' }));
+      throw new Error(errorData.error || `Upload failed with status ${response.status}`);
+    }
+
+    const result = await response.json();
+    const storagePath = result.storage_path;
+
+    if (!storagePath) {
+      throw new Error('Edge Function did not return storage_path');
+    }
+
+    const { data: mediaData, error: mediaError } = await supabase
+      .rpc('upsert_person_photo', {
+        p_person_id: personId,
+        p_storage_path: storagePath,
+        p_caption: null,
+        p_taken_at: null,
+      });
+
+    if (mediaError) {
+      throw mediaError;
+    }
+
+    if (!mediaData || mediaData.length === 0) {
+      throw new Error('Failed to create media record');
+    }
+
+    const { data: urlData } = await supabase.storage
+      .from('family-tree-media')
+      .createSignedUrl(storagePath, 3600);
+
+    return urlData?.signedUrl || null;
+  } catch (error) {
+    console.error('Error uploading photo:', error);
+    return null;
+  }
+};
+
+export interface PersonMedia {
+  id: string;
+  person_id: string;
+  type: 'photo' | 'document';
+  storage_path: string;
+  caption: string | null;
+  taken_at: string | null;
+  is_primary: boolean;
+  created_at: string;
+}
+
+export const getPersonMedia = async (personId: string): Promise<PersonMedia[]> => {
+  try {
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) {
+      throw new Error('User not authenticated');
+    }
+
+    const { data, error } = await supabase
+      .rpc('get_person_media', { p_person_id: personId });
+
+    if (error) {
+      console.error('Error fetching person media:', error);
+      return [];
+    }
+
+    return (data || []) as PersonMedia[];
+  } catch (error) {
+    console.error('Error in getPersonMedia:', error);
+    return [];
+  }
+};
+
+export const getPersonMediaUrl = async (storagePath: string): Promise<string | null> => {
+  try {
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) {
+      return null;
+    }
+
+    const { data: urlData, error: urlError } = await supabase.storage
+      .from('family-tree-media')
+      .createSignedUrl(storagePath, 3600); // 1 hour expiry
+
+    if (urlError || !urlData) {
+      console.error('Error creating signed URL for media:', urlError);
+      return null;
+    }
+
+    return urlData.signedUrl;
+  } catch (error) {
+    console.error('Error in getPersonMediaUrl:', error);
+    return null;
+  }
+};
+
+export const uploadPersonMedia = async (
+  personId: string,
+  file: File,
+  caption?: string,
+  takenAt?: string
+): Promise<PersonMedia | null> => {
+  try {
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) {
+      throw new Error('User not authenticated');
+    }
+
+    const { data: treeId, error: treeIdError } = await supabase
+      .rpc('get_person_tree_id', { p_person_id: personId });
+
+    if (treeIdError || !treeId) {
+      throw new Error('Could not find tree_id for person');
+    }
+
+    // Convert file to base64
+    const reader = new FileReader();
+    const base64 = await new Promise<string>((resolve, reject) => {
+      reader.onload = () => {
+        const result = reader.result as string;
+        const base64Data = result.split(',')[1];
+        resolve(base64Data);
+      };
+      reader.onerror = reject;
+      reader.readAsDataURL(file);
+    });
+
+    const fileExt = file.name.split('.').pop() || 'jpg';
+    const mimeType = file.type || (fileExt === 'png' ? 'image/png' : 'image/jpeg');
+
+    const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
+    if (!supabaseUrl) {
+      throw new Error('VITE_SUPABASE_URL is not configured');
+    }
+
+    const { data: { session } } = await supabase.auth.getSession();
+    if (!session) {
+      throw new Error('No active session');
+    }
+
+    const edgeFunctionUrl = `${supabaseUrl}/functions/v1/upload_person_photo`;
+    const response = await fetch(edgeFunctionUrl, {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${session.access_token}`,
+        'apikey': import.meta.env.VITE_SUPABASE_ANON_KEY || '',
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        file_base64: base64,
+        file_name: `photo_${Date.now()}.${fileExt}`,
+        mime_type: mimeType,
+        tree_id: treeId,
+        person_id: personId,
+      }),
+    });
+
+    if (!response.ok) {
+      const errorData = await response.json().catch(() => ({ error: 'Unknown error' }));
+      throw new Error(errorData.error || `Upload failed with status ${response.status}`);
+    }
+
+    const result = await response.json();
+    const storagePath = result.storage_path;
+
+    if (!storagePath) {
+      throw new Error('Edge Function did not return storage_path');
+    }
+
+    // Add media record (non-primary)
+    const { data: mediaData, error: mediaError } = await supabase
+      .rpc('add_person_media', {
+        p_person_id: personId,
+        p_storage_path: storagePath,
+        p_caption: caption || null,
+        p_taken_at: takenAt || null,
+      });
+
+    if (mediaError) {
+      throw mediaError;
+    }
+
+    if (!mediaData || mediaData.length === 0) {
+      throw new Error('Failed to create media record');
+    }
+
+    return mediaData[0] as PersonMedia;
+  } catch (error) {
+    console.error('Error uploading media:', error);
+    return null;
+  }
+};
+
+export const deletePersonMedia = async (mediaId: string): Promise<boolean> => {
+  try {
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) {
+      throw new Error('User not authenticated');
+    }
+
+    const { data, error } = await supabase
+      .rpc('delete_person_media', { p_media_id: mediaId });
+
+    if (error) {
+      console.error('Error deleting media:', error);
+      return false;
+    }
+
+    return data === true;
+  } catch (error) {
+    console.error('Error in deletePersonMedia:', error);
+    return false;
+  }
+};
+
+export const isSelfPerson = async (personId: string): Promise<boolean> => {
+  try {
+    const { data, error } = await supabase.rpc('is_self_person', { p_person_id: personId });
+    if (error) {
+      console.error('Error checking if self person:', error);
+      return false;
+    }
+    return data === true;
+  } catch (error) {
+    console.error('Error in isSelfPerson:', error);
+    return false;
+  }
+};
+
+export const findPersonByEmailInTree = async (
+  treeId: string,
+  email: string
+): Promise<{ personId: string; firstName: string; lastName: string; displayName: string } | null> => {
+  try {
+    const { data, error } = await supabase.rpc('find_person_by_email_in_tree', {
+      p_tree_id: treeId,
+      p_email: email.trim().toLowerCase(),
+    });
+
+    if (error) {
+      console.error('Error finding person by email:', error);
+      return null;
+    }
+
+    if (!data || data.length === 0) {
+      return null;
+    }
+
+    const person = data[0];
+    return {
+      personId: person.person_id,
+      firstName: person.first_name || '',
+      lastName: person.last_name || '',
+      displayName: person.display_name || '',
+    };
+  } catch (error) {
+    console.error('Error in findPersonByEmailInTree:', error);
+    return null;
+  }
+};
+
+export const shareTreeByEmail = async (
+  treeId: string,
+  email: string,
+  role: 'viewer' | 'editor' = 'viewer'
+): Promise<ShareTreeResult | null> => {
+  try {
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) {
+      throw new Error('User not authenticated');
+    }
+
+    const { data, error } = await supabase.rpc('share_tree_by_email', {
+      p_tree_id: treeId,
+      p_email: email.trim().toLowerCase(),
+      p_role: role,
+    });
+
+    if (error) {
+      console.error('Error sharing tree:', error);
+      throw new Error(error.message || 'Erreur lors du partage de l\'arbre');
+    }
+
+    return data as ShareTreeResult;
+  } catch (error: any) {
+    console.error('Error in shareTreeByEmail:', error);
+    throw error;
+  }
+};
+
+export const getPersonTreeId = async (personId: string): Promise<string | null> => {
+  try {
+    const { data, error } = await supabase.rpc('get_person_tree_id', { p_person_id: personId });
+    
+    if (error) {
+      console.error('Error getting person tree ID:', error);
+      return null;
+    }
+    
+    return data || null;
+  } catch (error) {
+    console.error('Error in getPersonTreeId:', error);
+    return null;
+  }
+};
+
+export const getUserTreeRole = async (treeId: string): Promise<'owner' | 'editor' | 'viewer' | null> => {
+  try {
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) return null;
+
+    const trees = await getUserTrees();
+    const tree = trees.find(t => t.id === treeId);
+    
+    if (!tree) return null;
+    
+    return tree.role as 'owner' | 'editor' | 'viewer';
+  } catch (error) {
+    console.error('Error in getUserTreeRole:', error);
+    return null;
+  }
+};
+
+export const getSelfPersonId = async (_treeId: string, personIds: string[]): Promise<string | null> => {
+  try {
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user || !user.email) {
+      console.log('🔍 getSelfPersonId: No user authenticated or no email');
+      return null;
+    }
+
+    const userEmail = user.email.toLowerCase().trim();
+    console.log('🔍 getSelfPersonId: Looking for person with email:', userEmail, 'in', personIds.length, 'persons');
+
+    // Check each person's contacts to find matching email
+    for (const personId of personIds) {
+      try {
+        const contacts = await getPersonContacts(personId);
+        const emailContacts = contacts.filter(c => c.type === 'email');
+        
+        for (const contact of emailContacts) {
+          const contactEmail = contact.value.toLowerCase().trim();
+          if (contactEmail === userEmail) {
+            console.log('✅ getSelfPersonId: Found self person by email:', personId, 'Email:', contactEmail);
+            return personId;
+          }
+        }
+      } catch (error) {
+        console.error('Error checking contacts for person', personId, ':', error);
+      }
+    }
+
+    console.log('⚠️ getSelfPersonId: No person found with email:', userEmail);
+    return null;
+  } catch (error) {
+    console.error('Error in getSelfPersonId:', error);
+    return null;
+  }
+};
+

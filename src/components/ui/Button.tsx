@@ -58,8 +58,9 @@ export const Button: React.FC<ButtonProps> = ({
       case 'primary':
         return theme.colors.primary;
       case 'secondary':
-        return theme.colors.secondary;
+        return theme.colors.surfaceElevated;
       case 'ghost':
+        return theme.colors.backgroundSecondary;
       case 'glass':
         return 'transparent';
       default:
@@ -71,10 +72,10 @@ export const Button: React.FC<ButtonProps> = ({
     if (disabled) return theme.colors.textTertiary;
     switch (variant) {
       case 'primary':
-      case 'secondary':
         return theme.colors.textInverse;
-      case 'ghost':
+      case 'secondary':
       case 'glass':
+      case 'ghost':
         return theme.colors.text;
       default:
         return theme.colors.textInverse;
@@ -91,7 +92,10 @@ export const Button: React.FC<ButtonProps> = ({
         />
       ) : null}
       {typeof children === 'string' ? (
-        <Text weight="medium" color={variant === 'ghost' || variant === 'glass' ? 'text' : 'textInverse'}>
+        <Text
+          weight="medium"
+          color={variant === 'primary' ? 'textInverse' : 'text'}
+        >
           {children}
         </Text>
       ) : (
@@ -99,6 +103,9 @@ export const Button: React.FC<ButtonProps> = ({
       )}
     </>
   );
+
+  const isGhost = variant === 'ghost';
+  const isSecondary = variant === 'secondary';
 
   const buttonStyle: ViewStyle = {
     minHeight: getMinHeight(),
@@ -108,10 +115,10 @@ export const Button: React.FC<ButtonProps> = ({
     flexDirection: 'row',
     ...getPadding(),
     backgroundColor: variant === 'glass' ? undefined : getBackgroundColor(),
-    borderWidth: variant === 'ghost' ? 1 : 0,
-    borderColor: variant === 'ghost' ? theme.colors.border : undefined,
+    borderWidth: isGhost || isSecondary ? 1 : 0,
+    borderColor: isGhost || isSecondary ? theme.colors.border : undefined,
     opacity: disabled ? 0.5 : 1,
-    ...theme.shadows.soft,
+    ...(isGhost ? theme.shadows.none : theme.shadows.soft),
     ...style,
   };
 

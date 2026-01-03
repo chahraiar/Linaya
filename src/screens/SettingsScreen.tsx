@@ -44,18 +44,14 @@ export const SettingsScreen: React.FC = () => {
               onPress={() => setLanguage('fr')}
               style={styles.optionButton}
             >
-              <Text style={language === 'fr' ? undefined : styles.ghostButtonText}>
-                Français
-              </Text>
+              Français
             </Button>
             <Button
               variant={language === 'en' ? 'primary' : 'ghost'}
               onPress={() => setLanguage('en')}
               style={styles.optionButton}
             >
-              <Text style={language === 'en' ? undefined : styles.ghostButtonText}>
-                English
-              </Text>
+              English
             </Button>
           </View>
         </Card>
@@ -79,9 +75,7 @@ export const SettingsScreen: React.FC = () => {
                 onPress={() => setTheme(themeName)}
                 style={styles.optionButton}
               >
-                <Text style={currentTheme === themeName ? undefined : styles.ghostButtonText}>
-                  {themeName}
-                </Text>
+                {themeName}
               </Button>
             ))}
           </View>
@@ -149,9 +143,6 @@ const styles = StyleSheet.create({
   },
   card: {
     backgroundColor: '#FFFFFF', // ✅ Fond blanc fixe pour les cards
-  },
-  ghostButtonText: {
-    color: '#1A1A1A', // ✅ Texte sombre pour les boutons ghost
   },
 });
 

@@ -21,6 +21,7 @@ const DraggableCard: React.FC<{
   dragStartPosition: React.MutableRefObject<{ x: number; y: number } | null>;
   customPositions: Record<string, { x: number; y: number }>;
   updateCustomPosition: (personId: string, x: number, y: number) => void;
+  onDragOffsetChange?: (personId: string, offset: { x: number; y: number } | null) => void;
 }> = ({
   node,
   x,
@@ -35,6 +36,7 @@ const DraggableCard: React.FC<{
   dragStartPosition,
   customPositions,
   updateCustomPosition,
+  onDragOffsetChange,
 }) => {
   // ⚠️ LOG DE RENDER - doit apparaître à chaque re-render
   console.log('🔄 DraggableCard RENDER for:', node.person.id, 'isEditMode:', isEditMode);
@@ -86,6 +88,9 @@ const DraggableCard: React.FC<{
         isDraggingRef.current = true;
         dragOffset.setValue({ x: 0, y: 0 });
         dragOffsetRef.current = { x: 0, y: 0 };
+        if (onDragOffsetChange) {
+          onDragOffsetChange(node.person.id, { x: 0, y: 0 });
+        }
         console.log('🎯 Drag GRANTED for:', node.person.id, 'at position:', basePositionRef.current.x, basePositionRef.current.y);
       },
       onPanResponderMove: (evt, gestureState) => {
@@ -94,6 +99,9 @@ const DraggableCard: React.FC<{
           const dy = gestureState.dy / scale;
           dragOffset.setValue({ x: dx, y: dy });
           dragOffsetRef.current = { x: dx, y: dy };
+          if (onDragOffsetChange) {
+            onDragOffsetChange(node.person.id, { x: dx, y: dy });
+          }
           console.log('🎯 Drag MOVE:', node.person.id, 'dx:', gestureState.dx, 'dy:', gestureState.dy, 'offset:', dx, dy);
         }
       },
@@ -111,6 +119,9 @@ const DraggableCard: React.FC<{
         dragOffset.setValue({ x: 0, y: 0 });
         dragOffsetRef.current = { x: 0, y: 0 };
         isDraggingRef.current = false;
+        if (onDragOffsetChange) {
+          onDragOffsetChange(node.person.id, null);
+        }
         draggingNodeId.current = null;
         dragStartPosition.current = null;
       },
@@ -119,6 +130,9 @@ const DraggableCard: React.FC<{
         dragOffset.setValue({ x: 0, y: 0 });
         dragOffsetRef.current = { x: 0, y: 0 };
         isDraggingRef.current = false;
+        if (onDragOffsetChange) {
+          onDragOffsetChange(node.person.id, null);
+        }
         draggingNodeId.current = null;
         dragStartPosition.current = null;
       },
@@ -176,6 +190,7 @@ const DraggableCard: React.FC<{
         person={node.person}
         onPress={() => {}}
         isSelected={isSelected}
+        disableTouch={true}
       />
     </TouchableOpacity>
   );
@@ -210,6 +225,29 @@ export const TreeRenderer: React.FC<TreeRendererProps> = ({
   const { selectedPersonId, isEditMode, customPositions, updateCustomPosition } = useFamilyTreeStore();
   const draggingNodeId = useRef<string | null>(null);
   const dragStartPosition = useRef<{ x: number; y: number } | null>(null);
+  const draggingOffsetsRef = useRef(new Map<string, { x: number; y: number }>());
+  const [dragVersion, setDragVersion] = React.useState(0);
+  const dragFrameRef = useRef<number | null>(null);
+
+  const scheduleDragRerender = useCallback(() => {
+    if (dragFrameRef.current !== null) return;
+    dragFrameRef.current = requestAnimationFrame(() => {
+      dragFrameRef.current = null;
+      setDragVersion((value) => value + 1);
+    });
+  }, []);
+
+  const handleDragOffsetChange = useCallback(
+    (personId: string, offset: { x: number; y: number } | null) => {
+      if (offset) {
+        draggingOffsetsRef.current.set(personId, offset);
+      } else {
+        draggingOffsetsRef.current.delete(personId);
+      }
+      scheduleDragRerender();
+    },
+    [scheduleDragRerender]
+  );
   
   // Debug: log edit mode changes
   React.useEffect(() => {
@@ -233,14 +271,15 @@ export const TreeRenderer: React.FC<TreeRendererProps> = ({
   };
   const getNodeBasePosition = (node: TreeNode) => {
     const customPos = customPositions[node.person.id];
+    const dragOffset = draggingOffsetsRef.current.get(node.person.id);
     return {
-      x: customPos ? customPos.x : node.position.x,
-      y: customPos ? customPos.y : node.position.y,
+      x: (customPos ? customPos.x : node.position.x) + (dragOffset?.x ?? 0),
+      y: (customPos ? customPos.y : node.position.y) + (dragOffset?.y ?? 0),
     };
   };
   // Render links between nodes with simple bus bundling (back to basics for reliability)
   const renderLinks = () => {
-    const links: JSX.Element[] = [];
+    const links: React.ReactElement[] = [];
     const processedLinks = new Set<string>();
     
     clusters.forEach((cluster) => {
@@ -353,8 +392,7 @@ export const TreeRenderer: React.FC<TreeRendererProps> = ({
               const partnerBase = getNodeBasePosition(partnerNode);
               const partnerX = transformX(partnerBase.x);
               const partnerY = transformY(partnerBase.y);
-              
-              // Only draw if partners are on the same level (within 10px)
+
               if (Math.abs(nodeY - partnerY) < 10) {
                 const cardCenterY = nodeY;
                 links.push(
@@ -364,6 +402,47 @@ export const TreeRenderer: React.FC<TreeRendererProps> = ({
                     y1={cardCenterY}
                     x2={partnerX}
                     y2={cardCenterY}
+                    stroke={LINK_COLOR}
+                    strokeWidth={LINK_STROKE_WIDTH}
+                    strokeOpacity={0.7}
+                    strokeLinecap="round"
+                  />
+                );
+              } else {
+                const midY = (nodeY + partnerY) / 2;
+                links.push(
+                  <Line
+                    key={`link-partner-v1-${partnerLinkKey}`}
+                    x1={nodeX}
+                    y1={nodeY}
+                    x2={nodeX}
+                    y2={midY}
+                    stroke={LINK_COLOR}
+                    strokeWidth={LINK_STROKE_WIDTH}
+                    strokeOpacity={0.7}
+                    strokeLinecap="round"
+                  />
+                );
+                links.push(
+                  <Line
+                    key={`link-partner-h-${partnerLinkKey}`}
+                    x1={nodeX}
+                    y1={midY}
+                    x2={partnerX}
+                    y2={midY}
+                    stroke={LINK_COLOR}
+                    strokeWidth={LINK_STROKE_WIDTH}
+                    strokeOpacity={0.7}
+                    strokeLinecap="round"
+                  />
+                );
+                links.push(
+                  <Line
+                    key={`link-partner-v2-${partnerLinkKey}`}
+                    x1={partnerX}
+                    y1={midY}
+                    x2={partnerX}
+                    y2={partnerY}
                     stroke={LINK_COLOR}
                     strokeWidth={LINK_STROKE_WIDTH}
                     strokeOpacity={0.7}
@@ -442,6 +521,7 @@ export const TreeRenderer: React.FC<TreeRendererProps> = ({
                 dragStartPosition={dragStartPosition}
                 customPositions={customPositions}
                 updateCustomPosition={updateCustomPosition}
+              onDragOffsetChange={handleDragOffsetChange}
               />
             );
           })
@@ -502,6 +582,7 @@ export const TreeRenderer: React.FC<TreeRendererProps> = ({
               dragStartPosition={dragStartPosition}
               customPositions={customPositions}
               updateCustomPosition={updateCustomPosition}
+              onDragOffsetChange={handleDragOffsetChange}
             />
           );
         })

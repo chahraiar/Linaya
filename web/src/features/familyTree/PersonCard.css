@@ -1,0 +1,144 @@
+.person-card-container {
+  position: relative;
+}
+
+.person-card {
+  width: 150px;
+  height: 130px;
+  background: white;
+  border-radius: 12px;
+  padding: 12px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+  cursor: pointer;
+  transition: all 0.2s;
+  border: 2px solid var(--border-color);
+  position: relative;
+}
+
+.person-card:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+}
+
+.person-card-selected {
+  border-color: var(--accent-color);
+  box-shadow: 0 4px 16px rgba(99, 102, 241, 0.3);
+  transform: scale(1.05);
+}
+
+.person-card-male {
+  border-color: #3b82f6 !important; /* Blue */
+  border-width: 3px;
+}
+
+.person-card-female {
+  border-color: #ec4899 !important; /* Pink */
+  border-width: 3px;
+}
+
+.person-card-male.person-card-selected {
+  border-color: var(--accent-color);
+}
+
+.person-card-female.person-card-selected {
+  border-color: var(--accent-color);
+}
+
+.person-card-avatar {
+  width: 60px;
+  height: 60px;
+  border-radius: 50%;
+  overflow: hidden;
+  margin-bottom: 8px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--bg-light);
+  border: 2px solid var(--border-color);
+}
+
+.person-card-avatar-img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+}
+
+.person-card-avatar-img[src=""] {
+  display: none;
+}
+
+.person-card-avatar-placeholder {
+  font-size: 2rem;
+}
+
+.person-card-avatar-icon {
+  width: 50px;
+  height: 50px;
+  color: rgba(25, 118, 210, 0.6);
+  stroke: currentColor;
+}
+
+.person-card-name {
+  font-size: 0.9rem;
+  font-weight: 600;
+  color: var(--primary-color);
+  text-align: center;
+  margin-bottom: 4px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  max-width: 100%;
+}
+
+.person-card-name-self {
+  color: #dc2626 !important;
+  font-weight: 700 !important;
+}
+
+.person-card-dates {
+  font-size: 0.75rem;
+  color: var(--text-gray);
+  text-align: center;
+}
+
+.person-card-hide-btn {
+  position: absolute;
+  top: 4px;
+  right: 4px;
+  background: rgba(255, 255, 255, 0.9);
+  border: none;
+  border-radius: 50%;
+  width: 24px;
+  height: 24px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  padding: 0;
+  z-index: 10;
+  transition: all 0.2s;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.2);
+}
+
+.person-card-hide-btn:hover {
+  background: rgba(239, 68, 68, 0.1);
+  transform: scale(1.1);
+}
+
+.person-card-hide-icon {
+  width: 16px;
+  height: 16px;
+  color: #666;
+  stroke: currentColor;
+  stroke-width: 2;
+}
+
+.person-card-hide-btn:hover .person-card-hide-icon {
+  color: #dc2626;
+}
+
