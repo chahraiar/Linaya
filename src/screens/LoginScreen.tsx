@@ -6,6 +6,7 @@ import {
   Platform,
   Alert,
   Image,
+  Linking,
 } from 'react-native';
 import { Video, ResizeMode, AVPlaybackStatus } from 'expo-av';
 import { LinearGradient } from 'expo-linear-gradient';
@@ -38,7 +39,37 @@ export const LoginScreen: React.FC = () => {
   useEffect(() => {
     // Start video playback
     video.current?.playAsync();
-  }, []);
+
+    // Handle deep links for OAuth callbacks
+    if (Platform.OS !== 'web') {
+      const handleDeepLink = async (url: string) => {
+        if (url.includes('auth/callback')) {
+          // Supabase handles the session automatically via deep link
+          // Check if user is authenticated
+          const { data: { session } } = await supabase.auth.getSession();
+          if (session) {
+            navigation.replace('FamilyTree');
+          }
+        }
+      };
+
+      // Check if app was opened via deep link
+      Linking.getInitialURL().then((url) => {
+        if (url) {
+          handleDeepLink(url);
+        }
+      });
+
+      // Listen for deep links while app is running
+      const subscription = Linking.addEventListener('url', ({ url }) => {
+        handleDeepLink(url);
+      });
+
+      return () => {
+        subscription.remove();
+      };
+    }
+  }, [navigation]);
 
   const handleGoogleSignIn = async () => {
     if (!isSupabaseReady) {

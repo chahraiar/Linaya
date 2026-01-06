@@ -10,6 +10,7 @@ export interface Person {
   deathDate?: string; // Format: YYYY-MM-DD
   gender?: string; // 'male' or 'female'
   isVisible?: boolean; // Controls visibility in tree view
+  notes?: string; // Notes about the person
   parentIds: string[];
   partnerId?: string;
   childrenIds: string[];

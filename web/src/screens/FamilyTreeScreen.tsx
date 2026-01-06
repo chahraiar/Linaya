@@ -17,6 +17,7 @@ import {
   UserPlusIcon,
   TrashIcon
 } from '@heroicons/react/24/outline';
+import { showSuccess, showError } from '../utils/notifications';
 import { AddPersonModal } from '../components/AddPersonModal';
 import './FamilyTreeScreen.css';
 
@@ -48,6 +49,7 @@ const FamilyTreeScreen = () => {
   const [panStart, setPanStart] = useState({ x: 0, y: 0 });
   const [selfPersonId, setSelfPersonId] = useState<string | null>(null);
   const [userDisplayName, setUserDisplayName] = useState<string>('');
+  const [userEmail, setUserEmail] = useState<string>('');
   const [showAddFirstPersonModal, setShowAddFirstPersonModal] = useState(false);
   const [isCreatingFirstPerson, setIsCreatingFirstPerson] = useState(false);
 
@@ -146,6 +148,12 @@ const FamilyTreeScreen = () => {
     try {
       setLoading(true);
       
+      // Get user email from auth
+      const { data: { user } } = await supabase.auth.getUser();
+      if (user?.email) {
+        setUserEmail(user.email);
+      }
+      
       // getUserTrees now automatically joins trees where user's email appears
       const loadedTrees = await getUserTrees();
       setTrees(loadedTrees);
@@ -215,7 +223,7 @@ const FamilyTreeScreen = () => {
       }
     } catch (error) {
       console.error('Error creating tree:', error);
-      alert('Erreur lors de la création de l\'arbre');
+      showError('Erreur lors de la création de l\'arbre');
     }
   };
 
@@ -267,13 +275,13 @@ const FamilyTreeScreen = () => {
           }
         }
         
-        alert('Arbre supprimé avec succès');
+        showSuccess('Arbre supprimé avec succès');
       } else {
-        alert('Erreur lors de la suppression de l\'arbre');
+        showError('Erreur lors de la suppression de l\'arbre');
       }
     } catch (error: any) {
       console.error('Error deleting tree:', error);
-      alert(error.message || 'Erreur lors de la suppression de l\'arbre');
+      showError(error.message || 'Erreur lors de la suppression de l\'arbre');
     }
   };
 
@@ -324,7 +332,7 @@ const FamilyTreeScreen = () => {
         // No need to reload all data - the filter in useEffect will handle it
         // The card will disappear immediately from the tree view
       } else {
-        alert('Erreur lors du masquage de la carte');
+        showError('Erreur lors du masquage de la carte');
       }
     } catch (error: any) {
       console.error('Error hiding person:', error);
@@ -334,7 +342,7 @@ const FamilyTreeScreen = () => {
         const { updatePerson } = useFamilyTreeStore.getState();
         updatePerson(personId, { isVisible: true });
       }
-      alert(`Erreur lors du masquage de la carte: ${error.message || 'Erreur inconnue'}`);
+      showError(`Erreur lors du masquage de la carte: ${error.message || 'Erreur inconnue'}`);
     }
   };
 
@@ -376,9 +384,9 @@ const FamilyTreeScreen = () => {
         // Reload tree data to show the new person
         await loadTreeData(treeId);
         setShowAddFirstPersonModal(false);
-        alert('Votre profil a été créé avec succès !');
+        showSuccess('Votre profil a été créé avec succès !');
       } else {
-        alert('Erreur lors de la création de votre profil');
+        showError('Erreur lors de la création de votre profil');
       }
     } catch (error) {
       console.error('Error creating first person:', error);
@@ -486,25 +494,32 @@ const FamilyTreeScreen = () => {
           )}
         </div>
         
-        <div className="tree-actions">
-          <button 
-            onClick={() => setEditMode(!isEditMode)}
-            className={`tree-btn-icon ${isEditMode ? 'active' : ''}`}
-            title={isEditMode ? t('tree.exitEditMode') : t('tree.editMode')}
-            disabled={currentTree?.role !== 'owner' && currentTree?.role !== 'editor'}
-          >
-            {isEditMode ? (
-              <CheckIcon className="icon" />
-            ) : (
-              <PencilSquareIcon className="icon" />
-            )}
-          </button>
-          <button onClick={() => navigate('/settings')} className="tree-btn-icon" title={t('settings.title')}>
-            <Cog6ToothIcon className="icon" />
-          </button>
-          <button onClick={handleLogout} className="tree-btn-icon" title={t('common.logout')}>
-            <ArrowLeftOnRectangleIcon className="icon" />
-          </button>
+        <div className="tree-header-right">
+          {userEmail && (
+            <div className="user-info">
+              <span className="user-email">{userEmail}</span>
+            </div>
+          )}
+          <div className="tree-actions">
+            <button 
+              onClick={() => setEditMode(!isEditMode)}
+              className={`tree-btn-icon ${isEditMode ? 'active' : ''}`}
+              title={isEditMode ? t('tree.exitEditMode') : t('tree.editMode')}
+              disabled={currentTree?.role !== 'owner' && currentTree?.role !== 'editor'}
+            >
+              {isEditMode ? (
+                <CheckIcon className="icon" />
+              ) : (
+                <PencilSquareIcon className="icon" />
+              )}
+            </button>
+            <button onClick={() => navigate('/settings')} className="tree-btn-icon" title={t('settings.title')}>
+              <Cog6ToothIcon className="icon" />
+            </button>
+            <button onClick={handleLogout} className="tree-btn-icon" title={t('common.logout')}>
+              <ArrowLeftOnRectangleIcon className="icon" />
+            </button>
+          </div>
         </div>
       </header>
 

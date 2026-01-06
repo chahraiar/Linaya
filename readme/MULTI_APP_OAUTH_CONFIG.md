@@ -20,7 +20,7 @@ SITE_URL=https://suivifinance.la-saint-quentinoise.fr
 # ADDITIONAL_REDIRECT_URLS : Liste de TOUTES les URLs autorisées pour OAuth
 # GoTrue valide que l'URL dans redirectTo est dans cette liste
 # Format : URLs séparées par des virgules, sans espaces
-ADDITIONAL_REDIRECT_URLS=https://suivifinance.la-saint-quentinoise.fr,https://suivifinance.la-saint-quentinoise.fr/auth/callback,https://test.la-saint-quentinoise.fr,https://test.la-saint-quentinoise.fr/auth/callback,https://dev.la-saint-quentinoise.fr,https://dev.la-saint-quentinoise.fr/auth/callback,http://localhost:3000,http://localhost:3000/auth/callback,http://127.0.0.1:3000/auth/callback,com.cccadamccc.SuiviFinance://auth/callback,com.cccadamccc.SuiviFinance://expo-auth-session,exp://192.168.11.154:8081/--/auth/callback,exp://192.168.5.8:8081/--/auth/callback,https://linaya.la-saint-quentinoise.fr,https://linaya.la-saint-quentinoise.fr/auth/callback
+ADDITIONAL_REDIRECT_URLS=https://suivifinance.la-saint-quentinoise.fr,https://suivifinance.la-saint-quentinoise.fr/auth/callback,https://test.la-saint-quentinoise.fr,https://test.la-saint-quentinoise.fr/auth/callback,https://dev.la-saint-quentinoise.fr,https://dev.la-saint-quentinoise.fr/auth/callback,http://localhost:3000,http://localhost:3000/auth/callback,http://127.0.0.1:3000/auth/callback,com.cccadamccc.SuiviFinance://auth/callback,com.cccadamccc.SuiviFinance://expo-auth-session,exp://192.168.11.154:8081/--/auth/callback,exp://192.168.5.8:8081/--/auth/callback,https://linaya.la-saint-quentinoise.fr,https://linaya.la-saint-quentinoise.fr/auth/callback,linaya://auth/callback
 
 # ============================================
 # GOOGLE OAUTH (pour SuiviFinance)

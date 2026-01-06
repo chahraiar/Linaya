@@ -1,7 +1,26 @@
 import { create } from 'zustand';
 
+export type SocialPlatform = 
+  | 'facebook'
+  | 'instagram'
+  | 'tiktok'
+  | 'youtube'
+  | 'snapchat'
+  | 'x'
+  | 'linkedin'
+  | 'pinterest'
+  | 'reddit'
+  | 'twitch'
+  | 'whatsapp'
+  | 'telegram'
+  | 'signal'
+  | 'wechat'
+  | 'vk'
+  | 'autre';
+
 export interface SocialLink {
-  platform: 'facebook' | 'instagram' | 'twitter' | 'linkedin' | 'website';
+  id?: string; // ID from database (person_contacts.id)
+  platform: SocialPlatform;
   url: string;
   label?: string;
 }

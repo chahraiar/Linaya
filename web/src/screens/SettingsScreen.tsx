@@ -3,8 +3,11 @@ import { useNavigate, Link } from 'react-router-dom';
 import { supabase } from '../lib/supabase';
 import { useTranslation } from 'react-i18next';
 import { setStoredLanguage } from '../i18n';
-import { getUserTrees, findPersonByEmailInTree, shareTreeByEmail } from '../services/treeService';
-import { ShareIcon, TrashIcon } from '@heroicons/react/24/outline';
+import { getUserTrees, findPersonByEmailInTree, shareTreeByEmail, updateTree, Tree } from '../services/treeService';
+import { downloadTreeExport, ExportOptions } from '../services/exportService';
+import { ImportTreeModal } from '../components/ImportTreeModal';
+import { ShareIcon, TrashIcon, ArrowDownTrayIcon, ArrowUpTrayIcon } from '@heroicons/react/24/outline';
+import { showSuccess, showError, showWarning } from '../utils/notifications';
 import './SettingsScreen.css';
 
 const SettingsScreen = () => {
@@ -18,6 +21,12 @@ const SettingsScreen = () => {
   const [shareMessage, setShareMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const [isDeleting, setIsDeleting] = useState(false);
+  const [currentTree, setCurrentTree] = useState<Tree | null>(null);
+  const [isExporting, setIsExporting] = useState(false);
+  const [showImportModal, setShowImportModal] = useState(false);
+  const [isEditingTreeName, setIsEditingTreeName] = useState(false);
+  const [editedTreeName, setEditedTreeName] = useState('');
+  const [isUpdatingTree, setIsUpdatingTree] = useState(false);
 
   useEffect(() => {
     loadTreeId();
@@ -28,9 +37,36 @@ const SettingsScreen = () => {
       const trees = await getUserTrees();
       if (trees.length > 0) {
         setTreeId(trees[0].id);
+        setCurrentTree(trees[0]);
+        setEditedTreeName(trees[0].name);
       }
     } catch (error) {
       console.error('Error loading tree:', error);
+    }
+  };
+
+  const handleUpdateTreeName = async () => {
+    if (!treeId || !editedTreeName.trim()) {
+      return;
+    }
+
+    setIsUpdatingTree(true);
+    try {
+      await updateTree(treeId, editedTreeName.trim());
+      // Reload trees to get updated name
+      const trees = await getUserTrees();
+      const updatedTree = trees.find(t => t.id === treeId);
+      if (updatedTree) {
+        setCurrentTree(updatedTree);
+        setEditedTreeName(updatedTree.name);
+      }
+      setIsEditingTreeName(false);
+      showSuccess(t('settings.treeNameUpdated'));
+    } catch (error: any) {
+      console.error('Error updating tree name:', error);
+      showError(t('settings.treeNameUpdateError') + ': ' + (error.message || 'Erreur inconnue'));
+    } finally {
+      setIsUpdatingTree(false);
     }
   };
 
@@ -80,11 +116,11 @@ const SettingsScreen = () => {
       }
 
       // Show success message
-      alert(t('settings.dataDeletionRequestSent'));
+      showSuccess(t('settings.dataDeletionRequestSent'));
       setShowDeleteConfirm(false);
     } catch (error: any) {
       console.error('Error requesting data deletion:', error);
-      alert(t('settings.dataDeletionRequestError') + ': ' + (error.message || 'Unknown error'));
+      showError(t('settings.dataDeletionRequestError') + ': ' + (error.message || 'Unknown error'));
     } finally {
       setIsDeleting(false);
     }
@@ -150,17 +186,147 @@ const SettingsScreen = () => {
     }
   };
 
+  const handleExport = async () => {
+    if (!treeId || !currentTree) {
+      showWarning('Aucun arbre sélectionné');
+      return;
+    }
+
+    setIsExporting(true);
+    try {
+      const options: ExportOptions = {
+        includeMedia: true,
+        includePositions: true,
+        includeContacts: true,
+        anonymizeUsers: true,
+      };
+
+      const filename = `arbre-${currentTree.name.replace(/[^a-z0-9]/gi, '_')}-${new Date().toISOString().split('T')[0]}.json`;
+      await downloadTreeExport(treeId, filename, options);
+      showSuccess('Export réussi ! Le fichier a été téléchargé.');
+    } catch (error: any) {
+      console.error('Error exporting tree:', error);
+      showError('Erreur lors de l\'export : ' + (error.message || 'Erreur inconnue'));
+    } finally {
+      setIsExporting(false);
+    }
+  };
+
+  const handleImportComplete = async (importedTreeId: string) => {
+    // Reload trees and navigate to the imported tree
+    const trees = await getUserTrees();
+    const importedTree = trees.find(t => t.id === importedTreeId);
+    if (importedTree) {
+      setCurrentTree(importedTree);
+      setTreeId(importedTreeId);
+      // Optionally navigate to the tree
+      navigate(`/?treeId=${importedTreeId}`);
+    }
+  };
+
   return (
     <div className="settings-screen">
       <div className="settings-container">
+        <button onClick={() => navigate(-1)} className="btn-back">
+          ←
+        </button>
         <header className="settings-header">
-          <button onClick={() => navigate(-1)} className="btn-back">
-            ← {t('common.back')}
-          </button>
           <h1>{t('settings.title')}</h1>
         </header>
 
         <div className="settings-content">
+          {currentTree && currentTree.role === 'owner' && (
+            <div className="settings-section">
+              <h2>{t('settings.treeName')}</h2>
+              <p className="settings-description">
+                {t('settings.treeNameDescription')}
+              </p>
+              
+              {isEditingTreeName ? (
+                <div className="share-tree-form">
+                  <div className="form-group">
+                    <label>{t('settings.treeNameLabel')}</label>
+                    <input
+                      type="text"
+                      className="form-input form-input-large"
+                      value={editedTreeName}
+                      onChange={(e) => setEditedTreeName(e.target.value)}
+                      onKeyDown={(e) => {
+                        if (e.key === 'Enter') {
+                          handleUpdateTreeName();
+                        } else if (e.key === 'Escape') {
+                          setIsEditingTreeName(false);
+                          setEditedTreeName(currentTree.name);
+                        }
+                      }}
+                      disabled={isUpdatingTree}
+                      autoFocus
+                      placeholder={t('settings.treeNameLabel')}
+                    />
+                    <div className="form-actions">
+                      <button
+                        onClick={handleUpdateTreeName}
+                        className="btn btn-primary"
+                        disabled={!editedTreeName.trim() || isUpdatingTree || editedTreeName.trim() === currentTree.name}
+                      >
+                        {isUpdatingTree ? t('common.saving') : t('common.save')}
+                      </button>
+                      <button
+                        onClick={() => {
+                          setIsEditingTreeName(false);
+                          setEditedTreeName(currentTree.name);
+                        }}
+                        className="btn btn-secondary"
+                        disabled={isUpdatingTree}
+                      >
+                        {t('common.cancel')}
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              ) : (
+                <div>
+                  <p style={{ fontSize: '1.1rem', fontWeight: 600, color: '#2d4059', marginBottom: '16px' }}>
+                    {currentTree.name}
+                  </p>
+                  <button
+                    onClick={() => setIsEditingTreeName(true)}
+                    className="btn btn-secondary"
+                  >
+                    {t('settings.editTreeName')}
+                  </button>
+                </div>
+              )}
+            </div>
+          )}
+
+          <div className="settings-section">
+            <h2>Export / Import</h2>
+            <p className="settings-description">
+              Exportez votre arbre généalogique pour le sauvegarder ou l'importer dans un autre compte.
+            </p>
+            
+            <div className="export-import-actions">
+              <button
+                onClick={handleExport}
+                className="btn btn-primary"
+                disabled={!treeId || isExporting}
+              >
+                <ArrowDownTrayIcon className="icon-inline" />
+                {isExporting ? 'Export en cours...' : 'Exporter l\'arbre'}
+              </button>
+              
+              <button
+                onClick={() => setShowImportModal(true)}
+                className="btn btn-secondary"
+                disabled={isExporting}
+              >
+                <ArrowUpTrayIcon className="icon-inline" />
+                Importer un arbre
+              </button>
+            </div>
+          </div>
+
           <div className="settings-section">
             <h2>{t('settings.shareTree')}</h2>
             <p className="settings-description">{t('settings.shareTreeDescription')}</p>
@@ -277,6 +443,12 @@ const SettingsScreen = () => {
           </div>
         </div>
       </div>
+
+      <ImportTreeModal
+        visible={showImportModal}
+        onClose={() => setShowImportModal(false)}
+        onImport={handleImportComplete}
+      />
     </div>
   );
 };

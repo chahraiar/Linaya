@@ -1,0 +1,80 @@
+.import-modal-content {
+  max-width: 600px;
+}
+
+.file-input {
+  padding: 8px;
+  cursor: pointer;
+}
+
+.file-info {
+  margin-top: 8px;
+  font-size: 12px;
+  color: #666;
+}
+
+.checkbox-label {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  cursor: pointer;
+}
+
+.checkbox-label input[type="checkbox"] {
+  width: auto;
+  cursor: pointer;
+}
+
+.import-result {
+  margin-top: 16px;
+}
+
+.result-success {
+  color: #2e7d32;
+}
+
+.result-error {
+  color: #d32f2f;
+}
+
+.result-stats {
+  list-style: none;
+  padding: 0;
+  margin: 16px 0;
+}
+
+.result-stats li {
+  padding: 4px 0;
+}
+
+.result-warnings {
+  margin-top: 16px;
+  padding: 12px;
+  background-color: #fff3cd;
+  border-radius: 8px;
+  border: 1px solid #ffc107;
+}
+
+.result-warnings h4 {
+  margin: 0 0 8px 0;
+  font-size: 14px;
+  color: #856404;
+}
+
+.result-warnings ul {
+  margin: 0;
+  padding-left: 20px;
+  color: #856404;
+  font-size: 13px;
+}
+
+.result-error ul {
+  list-style: none;
+  padding: 0;
+  margin: 16px 0;
+}
+
+.result-error li {
+  padding: 4px 0;
+}
+

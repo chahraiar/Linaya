@@ -176,6 +176,7 @@ export const getTreeData = async (treeId: string): Promise<{
         deathDate,
         gender: p.gender || undefined,
         isVisible: p.is_visible !== undefined ? p.is_visible : true,
+        notes: p.notes || undefined,
         parentIds,
         partnerId,
         childrenIds,
@@ -235,6 +236,38 @@ export const deleteTree = async (treeId: string): Promise<boolean> => {
     return data === true;
   } catch (error: any) {
     console.error('Error in deleteTree:', error);
+    throw error;
+  }
+};
+
+/**
+ * Update tree name and/or description (only for owners)
+ */
+export const updateTree = async (
+  treeId: string,
+  name?: string,
+  description?: string
+): Promise<boolean> => {
+  try {
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) {
+      throw new Error('User not authenticated');
+    }
+
+    const { data, error } = await supabase.rpc('update_tree', {
+      p_tree_id: treeId,
+      p_name: name || null,
+      p_description: description || null,
+    });
+
+    if (error) {
+      console.error('Error updating tree:', error);
+      throw new Error(error.message || 'Erreur lors de la mise à jour de l\'arbre');
+    }
+
+    return data === true;
+  } catch (error: any) {
+    console.error('Error in updateTree:', error);
     throw error;
   }
 };
@@ -602,6 +635,7 @@ export const updatePerson = async (
       deathDate,
       gender: personData.gender || undefined,
       isVisible: personData.is_visible !== undefined ? personData.is_visible : true,
+      notes: personData.notes || undefined,
       parentIds: [],
       partnerId: undefined,
       childrenIds: [],
@@ -654,6 +688,30 @@ export const checkEmailUniqueInTree = async (
     return data === true;
   } catch (error) {
     console.error('Error in checkEmailUniqueInTree:', error);
+    return false;
+  }
+};
+
+export const deletePersonContact = async (contactId: string): Promise<boolean> => {
+  try {
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) {
+      throw new Error('User not authenticated');
+    }
+
+    const { data, error } = await supabase
+      .rpc('delete_person_contact', {
+        p_contact_id: contactId,
+      });
+
+    if (error) {
+      console.error('Error deleting contact:', error);
+      return false;
+    }
+
+    return data === true;
+  } catch (error) {
+    console.error('Error in deletePersonContact:', error);
     return false;
   }
 };
@@ -839,43 +897,65 @@ export const getPersonMedia = async (personId: string): Promise<PersonMedia[]> =
   try {
     const { data: { user } } = await supabase.auth.getUser();
     if (!user) {
+      console.error('getPersonMedia: User not authenticated');
       throw new Error('User not authenticated');
     }
 
+    console.log('getPersonMedia: Fetching media for person:', personId);
     const { data, error } = await supabase
       .rpc('get_person_media', { p_person_id: personId });
 
     if (error) {
-      console.error('Error fetching person media:', error);
+      console.error('getPersonMedia: Error from RPC:', error);
       return [];
     }
 
-    return (data || []) as PersonMedia[];
+    const media = (data || []) as PersonMedia[];
+    console.log(`getPersonMedia: Found ${media.length} media items for person ${personId}`);
+    media.forEach((m, idx) => {
+      console.log(`getPersonMedia: Media ${idx + 1}: id=${m.id}, storage_path=${m.storage_path}, is_primary=${m.is_primary}`);
+    });
+
+    return media;
   } catch (error) {
-    console.error('Error in getPersonMedia:', error);
+    console.error('getPersonMedia: Exception:', error);
     return [];
   }
 };
 
 export const getPersonMediaUrl = async (storagePath: string): Promise<string | null> => {
   try {
-    const { data: { user } } = await supabase.auth.getUser();
-    if (!user) {
+    if (!storagePath || !storagePath.trim()) {
+      console.error('getPersonMediaUrl: storagePath is empty or invalid:', storagePath);
       return null;
     }
 
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) {
+      console.error('getPersonMediaUrl: User not authenticated');
+      return null;
+    }
+
+    console.log('getPersonMediaUrl: Creating signed URL for:', storagePath);
     const { data: urlData, error: urlError } = await supabase.storage
       .from('family-tree-media')
       .createSignedUrl(storagePath, 3600); // 1 hour expiry
 
-    if (urlError || !urlData) {
-      console.error('Error creating signed URL for media:', urlError);
+    if (urlError) {
+      console.error('getPersonMediaUrl: Error creating signed URL:', urlError);
+      console.error('getPersonMediaUrl: storagePath was:', storagePath);
       return null;
     }
 
+    if (!urlData || !urlData.signedUrl) {
+      console.error('getPersonMediaUrl: No signed URL returned');
+      return null;
+    }
+
+    console.log('getPersonMediaUrl: Successfully created signed URL');
     return urlData.signedUrl;
   } catch (error) {
-    console.error('Error in getPersonMediaUrl:', error);
+    console.error('getPersonMediaUrl: Exception:', error);
     return null;
   }
 };
@@ -995,6 +1075,52 @@ export const deletePersonMedia = async (mediaId: string): Promise<boolean> => {
     return data === true;
   } catch (error) {
     console.error('Error in deletePersonMedia:', error);
+    return false;
+  }
+};
+
+/**
+ * Set a media item as the primary photo for a person
+ */
+export const setPrimaryPhoto = async (personId: string, mediaId: string): Promise<boolean> => {
+  try {
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) {
+      throw new Error('User not authenticated');
+    }
+
+    // Get the media item to get its storage_path
+    const { data: mediaData, error: mediaError } = await supabase
+      .rpc('get_person_media', { p_person_id: personId });
+
+    if (mediaError) {
+      console.error('Error fetching media:', mediaError);
+      return false;
+    }
+
+    const media = (mediaData || []).find((m: PersonMedia) => m.id === mediaId);
+    if (!media || !media.storage_path) {
+      console.error('Media not found or has no storage_path');
+      return false;
+    }
+
+    // Use upsert_person_photo to set it as primary (it will update existing media)
+    const { data: upsertData, error: upsertError } = await supabase
+      .rpc('upsert_person_photo', {
+        p_person_id: personId,
+        p_storage_path: media.storage_path,
+        p_caption: media.caption || null,
+        p_taken_at: media.taken_at || null,
+      });
+
+    if (upsertError) {
+      console.error('Error setting primary photo:', upsertError);
+      return false;
+    }
+
+    return upsertData && upsertData.length > 0;
+  } catch (error) {
+    console.error('Error in setPrimaryPhoto:', error);
     return false;
   }
 };
@@ -1141,6 +1267,154 @@ export const getSelfPersonId = async (_treeId: string, personIds: string[]): Pro
   } catch (error) {
     console.error('Error in getSelfPersonId:', error);
     return null;
+  }
+};
+
+export interface PersonEvent {
+  id: string;
+  person_id: string;
+  type: string;
+  date_start: string | null;
+  date_end: string | null;
+  place_name: string | null;
+  place_lat: number | null;
+  place_lng: number | null;
+  notes: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export const getPersonEvents = async (personId: string): Promise<PersonEvent[]> => {
+  try {
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) {
+      throw new Error('User not authenticated');
+    }
+
+    const { data, error } = await supabase
+      .from('person_events')
+      .select('*')
+      .eq('person_id', personId)
+      .order('date_start', { ascending: true, nullsFirst: false });
+
+    if (error) {
+      console.error('Error fetching events:', error);
+      return [];
+    }
+
+    return (data || []) as PersonEvent[];
+  } catch (error) {
+    console.error('Error in getPersonEvents:', error);
+    return [];
+  }
+};
+
+export const createPersonEvent = async (
+  personId: string,
+  type: string,
+  dateStart?: string | null,
+  dateEnd?: string | null,
+  placeName?: string | null,
+  placeLat?: number | null,
+  placeLng?: number | null,
+  notes?: string | null
+): Promise<PersonEvent | null> => {
+  try {
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) {
+      throw new Error('User not authenticated');
+    }
+
+    const { data, error } = await supabase.rpc('create_person_event', {
+      p_person_id: personId,
+      p_type: type,
+      p_date_start: dateStart || null,
+      p_date_end: dateEnd || null,
+      p_place_name: placeName || null,
+      p_place_lat: placeLat || null,
+      p_place_lng: placeLng || null,
+      p_notes: notes || null,
+    });
+
+    if (error) {
+      console.error('Error creating event:', error);
+      throw new Error(error.message || 'Erreur lors de la création de l\'événement');
+    }
+
+    if (!data || data.length === 0) {
+      return null;
+    }
+
+    return data[0] as PersonEvent;
+  } catch (error: any) {
+    console.error('Error in createPersonEvent:', error);
+    throw error;
+  }
+};
+
+export const updatePersonEvent = async (
+  eventId: string,
+  type?: string,
+  dateStart?: string | null,
+  dateEnd?: string | null,
+  placeName?: string | null,
+  placeLat?: number | null,
+  placeLng?: number | null,
+  notes?: string | null
+): Promise<PersonEvent | null> => {
+  try {
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) {
+      throw new Error('User not authenticated');
+    }
+
+    const { data, error } = await supabase.rpc('update_person_event', {
+      p_event_id: eventId,
+      p_type: type || null,
+      p_date_start: dateStart !== undefined ? dateStart : null,
+      p_date_end: dateEnd !== undefined ? dateEnd : null,
+      p_place_name: placeName || null,
+      p_place_lat: placeLat || null,
+      p_place_lng: placeLng || null,
+      p_notes: notes || null,
+    });
+
+    if (error) {
+      console.error('Error updating event:', error);
+      throw new Error(error.message || 'Erreur lors de la mise à jour de l\'événement');
+    }
+
+    if (!data || data.length === 0) {
+      return null;
+    }
+
+    return data[0] as PersonEvent;
+  } catch (error: any) {
+    console.error('Error in updatePersonEvent:', error);
+    throw error;
+  }
+};
+
+export const deletePersonEvent = async (eventId: string): Promise<boolean> => {
+  try {
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) {
+      throw new Error('User not authenticated');
+    }
+
+    const { data, error } = await supabase.rpc('delete_person_event', {
+      p_event_id: eventId,
+    });
+
+    if (error) {
+      console.error('Error deleting event:', error);
+      throw new Error(error.message || 'Erreur lors de la suppression de l\'événement');
+    }
+
+    return data === true;
+  } catch (error: any) {
+    console.error('Error in deletePersonEvent:', error);
+    throw error;
   }
 };
 

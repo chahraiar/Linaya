@@ -4,6 +4,7 @@ import { createRelationship } from '../services/treeService';
 import { useFamilyTreeStore } from '../store/familyTreeStore';
 import { supabase } from '../lib/supabase';
 import { UserIcon } from '@heroicons/react/24/outline';
+import { showSuccess, showError } from '../utils/notifications';
 import './LinkExistingPersonModal.css';
 
 interface LinkExistingPersonModalProps {
@@ -93,7 +94,7 @@ export const LinkExistingPersonModal: React.FC<LinkExistingPersonModalProps> = (
       setFilteredPersons(available);
     } catch (error) {
       console.error('Error loading available persons:', error);
-      alert('Erreur lors du chargement des personnes');
+      showError('Erreur lors du chargement des personnes');
     } finally {
       setLoading(false);
     }
@@ -110,7 +111,7 @@ export const LinkExistingPersonModal: React.FC<LinkExistingPersonModalProps> = (
         .rpc('get_person_tree_id', { p_person_id: personId });
       
       if (treeIdError || !treeIdData) {
-        alert('Impossible de trouver l\'arbre');
+        showError('Impossible de trouver l\'arbre');
         return;
       }
 
@@ -140,7 +141,7 @@ export const LinkExistingPersonModal: React.FC<LinkExistingPersonModalProps> = (
       const success = await createRelationship(treeId, fromId, toId, relType);
 
       if (success) {
-        alert(t('tree.personAdded') || 'Relation créée avec succès');
+        showSuccess(t('tree.personAdded') || 'Relation créée avec succès');
         
         if (onRelationshipCreated) {
           await onRelationshipCreated();
@@ -148,11 +149,11 @@ export const LinkExistingPersonModal: React.FC<LinkExistingPersonModalProps> = (
         
         onClose();
       } else {
-        alert('Erreur lors de la création de la relation');
+        showError('Erreur lors de la création de la relation');
       }
     } catch (error) {
       console.error('Error linking person:', error);
-      alert(`Erreur: ${error instanceof Error ? error.message : 'Erreur inconnue'}`);
+      showError(`Erreur: ${error instanceof Error ? error.message : 'Erreur inconnue'}`);
     } finally {
       setIsLinking(false);
     }

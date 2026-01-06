@@ -4,6 +4,7 @@ import { createPerson, createRelationship } from '../services/treeService';
 import { useFamilyTreeStore } from '../store/familyTreeStore';
 import { supabase } from '../lib/supabase';
 import { AddPersonModal } from './AddPersonModal';
+import { showSuccess, showError } from '../utils/notifications';
 import './AddRelativeModal.css';
 
 interface AddRelativeModalProps {
@@ -44,7 +45,7 @@ export const AddRelativeModal: React.FC<AddRelativeModalProps> = ({
         .rpc('get_person_tree_id', { p_person_id: personId });
       
       if (treeIdError || !treeIdData) {
-        alert('Impossible de trouver l\'arbre');
+        showError('Impossible de trouver l\'arbre');
         return;
       }
       
@@ -61,7 +62,7 @@ export const AddRelativeModal: React.FC<AddRelativeModalProps> = ({
       );
 
       if (!newPerson) {
-        alert('Erreur lors de la création de la personne');
+        showError('Erreur lors de la création de la personne');
         return;
       }
 
@@ -92,7 +93,7 @@ export const AddRelativeModal: React.FC<AddRelativeModalProps> = ({
       const relationshipCreated = await createRelationship(treeId, fromId, toId, relType);
       
       if (!relationshipCreated) {
-        alert('Erreur lors de la création de la relation');
+        showError('Erreur lors de la création de la relation');
         return;
       }
 
@@ -104,10 +105,10 @@ export const AddRelativeModal: React.FC<AddRelativeModalProps> = ({
       setShowPersonForm(false);
       onClose();
 
-      alert(t('tree.personAdded') || 'Personne ajoutée avec succès');
+      showSuccess(t('tree.personAdded') || 'Personne ajoutée avec succès');
     } catch (error) {
       console.error('Error in handlePersonSubmit:', error);
-      alert(`Erreur: ${error instanceof Error ? error.message : 'Erreur inconnue'}`);
+      showError(`Erreur: ${error instanceof Error ? error.message : 'Erreur inconnue'}`);
     } finally {
       setIsCreatingPerson(false);
     }

@@ -219,6 +219,28 @@
   border-color: var(--border-color);
 }
 
+.tree-header-right {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+}
+
+.user-info {
+  display: flex;
+  align-items: center;
+  padding: 8px 16px;
+  background: rgba(45, 64, 89, 0.05);
+  border-radius: 8px;
+  border: 1px solid rgba(45, 64, 89, 0.1);
+}
+
+.user-email {
+  font-size: 0.875rem;
+  font-weight: 600;
+  color: #2d4059;
+  white-space: nowrap;
+}
+
 .tree-actions {
   display: flex;
   gap: 8px;

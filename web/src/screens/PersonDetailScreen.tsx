@@ -1,4 +1,4 @@
-import { useEffect, useState, useRef } from 'react';
+import { useEffect, useState, useRef, useCallback, useMemo } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { useFamilyTreeStore } from '../store/familyTreeStore';
 import { usePersonDetailStore } from '../store/personDetailStore';
@@ -21,11 +21,20 @@ import {
   getPersonMediaUrl,
   uploadPersonMedia,
   deletePersonMedia,
+  setPrimaryPhoto,
   PersonMedia,
+  deletePersonContact,
+  getPersonEvents,
+  createPersonEvent,
+  updatePersonEvent,
+  deletePersonEvent,
+  PersonEvent,
 } from '../services/treeService';
+import { SocialLink } from '../store/personDetailStore';
 import { supabase } from '../lib/supabase';
 import { AddRelativeModal } from '../components/AddRelativeModal';
 import { LinkExistingPersonModal } from '../components/LinkExistingPersonModal';
+import SocialLinksTab from './SocialLinksTab';
 import {
   PencilIcon,
   XMarkIcon,
@@ -33,11 +42,16 @@ import {
   CameraIcon,
   UserIcon,
   LinkIcon,
+  StarIcon,
   ArrowLeftIcon,
+  HomeIcon,
+  PlusIcon,
 } from '@heroicons/react/24/outline';
+import { showSuccess, showError, showWarning } from '../utils/notifications';
+import { ConfirmModal } from '../components/ConfirmModal';
 import './PersonDetailScreen.css';
 
-type TabType = 'data' | 'events' | 'media' | 'relatives';
+type TabType = 'data' | 'events' | 'media' | 'relatives' | 'social';
 
 const PersonDetailScreen = () => {
   const { personId } = useParams<{ personId: string }>();
@@ -71,6 +85,8 @@ const PersonDetailScreen = () => {
   const [isSelf, setIsSelf] = useState(false);
   const [isDeleting, setIsDeleting] = useState(false);
   const [canEdit, setCanEdit] = useState(false);
+  const [treeId, setTreeId] = useState<string | null>(null);
+  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
 
   const [showAddParentModal, setShowAddParentModal] = useState(false);
   const [showAddChildModal, setShowAddChildModal] = useState(false);
@@ -82,55 +98,25 @@ const PersonDetailScreen = () => {
   const person = personId ? getPerson(personId) : null;
   const details = personId ? getPersonDetails(personId) : null;
 
-  useEffect(() => {
-    if (personId) {
-      loadContacts();
-      loadPhoto();
-      checkIfSelf();
-      loadUserTreeRole();
-    }
-  }, [personId]);
-
-  const loadUserTreeRole = async () => {
+  // Define all callback functions BEFORE the useEffect that uses them
+  const loadUserTreeRole = useCallback(async () => {
     if (!personId) return;
     
     try {
       // Get tree_id from person
-      const treeId = await getPersonTreeId(personId);
-      if (treeId) {
-        const role = await getUserTreeRole(treeId);
+      const personTreeId = await getPersonTreeId(personId);
+      if (personTreeId) {
+        setTreeId(personTreeId);
+        const role = await getUserTreeRole(personTreeId);
         setCanEdit(role === 'owner' || role === 'editor');
       }
     } catch (error) {
       console.error('Error loading user tree role:', error);
       setCanEdit(false);
     }
-  };
+  }, [personId]);
 
-  useEffect(() => {
-    if (person && isEditing) {
-      setEditedFirstName(person.firstName || '');
-      setEditedLastName(person.lastName || '');
-      // Use full date if available, otherwise construct from year
-      setEditedBirthDate(person.birthDate || (person.birthYear ? `${person.birthYear}-01-01` : ''));
-      setEditedDeathDate(person.deathDate || (person.deathYear ? `${person.deathYear}-01-01` : ''));
-      setEditedGender(person.gender || '');
-    }
-  }, [person, isEditing]);
-
-  useEffect(() => {
-    if (person && isEditingData) {
-      setEditedFirstName(person.firstName || '');
-      setEditedLastName(person.lastName || '');
-      // Use full date if available, otherwise construct from year
-      setEditedBirthDate(person.birthDate || (person.birthYear ? `${person.birthYear}-01-01` : ''));
-      setEditedDeathDate(person.deathDate || (person.deathYear ? `${person.deathYear}-01-01` : ''));
-      setEditedGender(person.gender || '');
-      setEditedNotes('');
-    }
-  }, [person, isEditingData]);
-
-  const checkIfSelf = async () => {
+  const checkIfSelf = useCallback(async () => {
     if (!personId) return;
     try {
       const self = await isSelfPerson(personId);
@@ -139,9 +125,9 @@ const PersonDetailScreen = () => {
       console.error('Error checking if self person:', error);
       setIsSelf(false);
     }
-  };
+  }, [personId]);
 
-  const loadPhoto = async () => {
+  const loadPhoto = useCallback(async () => {
     if (!personId) return;
     try {
       const url = await getPersonPhotoUrl(personId);
@@ -149,9 +135,9 @@ const PersonDetailScreen = () => {
     } catch (error) {
       console.error('Error loading photo:', error);
     }
-  };
+  }, [personId]);
 
-  const loadContacts = async () => {
+  const loadContacts = useCallback(async () => {
     if (!personId) return;
     setIsLoadingContacts(true);
     try {
@@ -176,14 +162,65 @@ const PersonDetailScreen = () => {
     } finally {
       setIsLoadingContacts(false);
     }
-  };
+  }, [personId]);
+
+  // Now the useEffect can use the functions
+  useEffect(() => {
+    if (!personId) return;
+    
+    let cancelled = false;
+    
+    const loadData = async () => {
+      try {
+        await Promise.all([
+          loadContacts(),
+          loadPhoto(),
+          checkIfSelf(),
+          loadUserTreeRole(),
+        ]);
+      } catch (error) {
+        if (!cancelled) {
+          console.error('Error loading person data:', error);
+        }
+      }
+    };
+    
+    loadData();
+    
+    return () => {
+      cancelled = true;
+    };
+  }, [personId, loadContacts, loadPhoto, checkIfSelf, loadUserTreeRole]);
+
+  useEffect(() => {
+    if (person && isEditing) {
+      setEditedFirstName(person.firstName || '');
+      setEditedLastName(person.lastName || '');
+      // Use full date if available, otherwise construct from year
+      setEditedBirthDate(person.birthDate || (person.birthYear ? `${person.birthYear}-01-01` : ''));
+      setEditedDeathDate(person.deathDate || (person.deathYear ? `${person.deathYear}-01-01` : ''));
+      setEditedGender(person.gender || '');
+    }
+  }, [person, isEditing]);
+
+  useEffect(() => {
+    if (person && isEditingData) {
+      setEditedFirstName(person.firstName || '');
+      setEditedLastName(person.lastName || '');
+      // Use full date if available, otherwise construct from year
+      setEditedBirthDate(person.birthDate || (person.birthYear ? `${person.birthYear}-01-01` : ''));
+      setEditedDeathDate(person.deathDate || (person.deathYear ? `${person.deathYear}-01-01` : ''));
+      setEditedGender(person.gender || '');
+      setEditedNotes(person.notes || details?.notes || '');
+    }
+  }, [person, details, isEditingData]);
 
   const handleSave = async () => {
     if (!personId) return;
 
     // Validate gender is required
     if (!editedGender || (editedGender !== 'male' && editedGender !== 'female')) {
-      alert('Le genre est obligatoire. Veuillez sélectionner Masculin ou Féminin.');
+      showWarning('Le genre est obligatoire. Veuillez sélectionner Masculin ou Féminin.');
       return;
     }
 
@@ -208,16 +245,17 @@ const PersonDetailScreen = () => {
           birthDate: updatedPerson.birthDate,
           deathDate: updatedPerson.deathDate,
           gender: updatedPerson.gender,
+          notes: updatedPerson.notes,
         });
 
         setIsEditing(false);
-        alert('Modifications enregistrées');
+        showSuccess('Modifications enregistrées');
       } else {
-        alert('Erreur lors de la sauvegarde');
+        showError('Erreur lors de la sauvegarde');
       }
     } catch (error) {
       console.error('Error saving person:', error);
-      alert('Erreur lors de la sauvegarde');
+      showError('Erreur lors de la sauvegarde');
     } finally {
       setIsSaving(false);
     }
@@ -228,7 +266,7 @@ const PersonDetailScreen = () => {
 
     // Validate gender is required
     if (!editedGender || (editedGender !== 'male' && editedGender !== 'female')) {
-      alert('Le genre est obligatoire. Veuillez sélectionner Masculin ou Féminin.');
+      showWarning('Le genre est obligatoire. Veuillez sélectionner Masculin ou Féminin.');
       return;
     }
 
@@ -253,6 +291,7 @@ const PersonDetailScreen = () => {
           birthDate: updatedPerson.birthDate,
           deathDate: updatedPerson.deathDate,
           gender: updatedPerson.gender,
+          notes: updatedPerson.notes,
         });
       }
 
@@ -260,7 +299,7 @@ const PersonDetailScreen = () => {
         try {
           await upsertPersonContact(personId, 'email', editedEmail.trim(), 'Email principal', true);
         } catch (error: any) {
-          alert(error.message || 'Erreur lors de l\'enregistrement de l\'email');
+          showError(error.message || 'Erreur lors de l\'enregistrement de l\'email');
           setIsSaving(false);
           return;
         }
@@ -281,18 +320,25 @@ const PersonDetailScreen = () => {
       alert('Modifications enregistrées');
     } catch (error) {
       console.error('Error saving data:', error);
-      alert('Erreur lors de la sauvegarde');
+      showError('Erreur lors de la sauvegarde');
     } finally {
       setIsSaving(false);
     }
   };
 
-  const handleDeletePerson = async () => {
-    if (!personId || !person) return;
-
-    if (!confirm(`Êtes-vous sûr de vouloir supprimer ${person.firstName} ${person.lastName} ? Cette action est irréversible.`)) {
+  const handleDeletePerson = () => {
+    if (!personId || !person) {
+      console.log('Cannot delete: missing personId or person', { personId, person });
       return;
     }
+    console.log('Opening delete confirmation modal');
+    setShowDeleteConfirm(true);
+  };
+
+  const confirmDeletePerson = async () => {
+    if (!personId || !person) return;
+    
+    setShowDeleteConfirm(false);
 
     try {
       setIsDeleting(true);
@@ -300,16 +346,16 @@ const PersonDetailScreen = () => {
       
       deletePersonFromStore(personId);
 
-      alert('Personne supprimée avec succès');
+      showSuccess('Personne supprimée avec succès');
       navigate(-1);
     } catch (error: any) {
       console.error('Error deleting person:', error);
       const errorMessage = error?.message || 'Erreur inconnue';
       
       if (errorMessage.includes('own person') || errorMessage.includes('self person')) {
-        alert('Vous ne pouvez pas supprimer votre propre profil');
+        showWarning('Vous ne pouvez pas supprimer votre propre profil');
       } else {
-        alert(`Erreur lors de la suppression: ${errorMessage}`);
+        showError(`Erreur lors de la suppression: ${errorMessage}`);
       }
     } finally {
       setIsDeleting(false);
@@ -325,13 +371,13 @@ const PersonDetailScreen = () => {
       const url = await uploadPersonPhoto(personId, file);
       if (url) {
         setPhotoUrl(url);
-        alert('Photo uploadée avec succès');
+        showSuccess('Photo uploadée avec succès');
       } else {
-        alert('Erreur lors de l\'upload de la photo');
+        showError('Erreur lors de l\'upload de la photo');
       }
     } catch (error) {
       console.error('Error uploading photo:', error);
-      alert('Erreur lors de l\'upload de la photo');
+      showError('Erreur lors de l\'upload de la photo');
     } finally {
       setIsUploadingPhoto(false);
     }
@@ -364,13 +410,25 @@ const PersonDetailScreen = () => {
 
   const fullName = `${person.firstName} ${person.lastName}`.trim() || 'Sans nom';
 
+  const handleGoToTree = () => {
+    if (treeId) {
+      navigate(`/?treeId=${treeId}`);
+    } else {
+      navigate('/');
+    }
+  };
+
   return (
+    <>
     <div className="person-detail-screen">
       <div className="person-detail-container">
+        <button onClick={() => navigate(-1)} className="btn-back">
+          ←
+        </button>
+        <button onClick={handleGoToTree} className="btn-back btn-back-tree" title={t('tree.title') || 'Retour à l\'arbre'}>
+          <HomeIcon className="icon-inline" />
+        </button>
         <header className="person-detail-header">
-          <button onClick={() => navigate(-1)} className="btn-back">
-            <ArrowLeftIcon className="icon-inline" /> {t('common.back')}
-          </button>
           <h1>{t('person.profile')}</h1>
           <div className="header-right-buttons">
             {canEdit && !isSelf && (
@@ -528,6 +586,12 @@ const PersonDetailScreen = () => {
             >
               {t('person.relatives')}
             </button>
+            <button
+              className={`tab ${activeTab === 'social' ? 'tab-active' : ''}`}
+              onClick={() => setActiveTab('social')}
+            >
+              {t('person.socialNetworks')}
+            </button>
           </div>
 
           <div className="tab-content">
@@ -564,7 +628,7 @@ const PersonDetailScreen = () => {
                 isSaving={isSaving}
               />
             )}
-            {activeTab === 'events' && <EventsTab person={person} details={details} />}
+            {activeTab === 'events' && <EventsTab person={person} details={details} canEdit={canEdit} />}
             {activeTab === 'media' && <MediaTab person={person} details={details} canEdit={canEdit} />}
             {activeTab === 'relatives' && (
               <RelativesTab 
@@ -576,6 +640,12 @@ const PersonDetailScreen = () => {
                 onShowLinkParent={() => setShowLinkParentModal(true)}
                 onShowLinkChild={() => setShowLinkChildModal(true)}
                 onShowLinkPartner={() => setShowLinkPartnerModal(true)}
+              />
+            )}
+            {activeTab === 'social' && (
+              <SocialLinksTab
+                personId={personId || ''}
+                canEdit={canEdit}
               />
             )}
           </div>
@@ -627,6 +697,20 @@ const PersonDetailScreen = () => {
         />
       </div>
     </div>
+    
+    <ConfirmModal
+      visible={showDeleteConfirm}
+      title={t('person.deletePerson')}
+      message={person ? t('person.deletePersonConfirm', { 
+        name: `${person.firstName} ${person.lastName}`.trim() || 'cette personne'
+      }) : t('person.deletePersonConfirm', { name: 'cette personne' })}
+      confirmText={t('common.delete')}
+      cancelText={t('common.cancel')}
+      onConfirm={confirmDeletePerson}
+      onCancel={() => setShowDeleteConfirm(false)}
+      type="danger"
+    />
+    </>
   );
 };
 
@@ -664,6 +748,7 @@ interface DataTabProps {
 
 const DataTab: React.FC<DataTabProps> = ({
   person,
+  details,
   contacts,
   isLoadingContacts,
   isEditing,
@@ -722,8 +807,8 @@ const DataTab: React.FC<DataTabProps> = ({
         <div className="section-header">
           <h3 className="section-title">{t('person.profile') || 'Informations personnelles'}</h3>
           {canEdit && !isEditing && (
-            <button className="btn btn-ghost btn-sm" onClick={() => setIsEditing(true)}>
-              ✏️
+            <button className="btn btn-ghost btn-sm" onClick={() => setIsEditing(true)} title={t('common.edit')}>
+              <PencilIcon className="icon-inline" />
             </button>
           )}
         </div>
@@ -839,6 +924,12 @@ const DataTab: React.FC<DataTabProps> = ({
                 </span>
               </div>
             )}
+            {(person.notes || details?.notes) && (
+              <div className="info-row">
+                <span className="info-label">{t('person.notes') || 'Notes'}</span>
+                <span className="info-value notes-value">{person.notes || details?.notes}</span>
+              </div>
+            )}
           </>
         )}
       </div>
@@ -913,42 +1004,329 @@ const DataTab: React.FC<DataTabProps> = ({
   );
 };
 
-const EventsTab: React.FC<{ person: any; details: any }> = ({ details }) => {
-  const { t } = useTranslation();
+interface EventsTabProps {
+  person: any;
+  details: any;
+  canEdit: boolean;
+}
 
-  if (!details || !details.events || details.events.length === 0) {
+const EventsTab: React.FC<EventsTabProps> = ({ person, canEdit }) => {
+  const { t } = useTranslation();
+  const [events, setEvents] = useState<PersonEvent[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [showAddEvent, setShowAddEvent] = useState(false);
+  const [editingEvent, setEditingEvent] = useState<PersonEvent | null>(null);
+  const [isSaving, setIsSaving] = useState(false);
+  const [isDeleting, setIsDeleting] = useState(false);
+
+  // Form state
+  const [eventType, setEventType] = useState<string>('other');
+  const [eventDateStart, setEventDateStart] = useState<string>('');
+  const [eventDateEnd, setEventDateEnd] = useState<string>('');
+  const [eventPlace, setEventPlace] = useState<string>('');
+  const [eventNotes, setEventNotes] = useState<string>('');
+
+  useEffect(() => {
+    loadEvents();
+  }, [person?.id]);
+
+  const loadEvents = async () => {
+    if (!person?.id) return;
+    try {
+      setLoading(true);
+      const loadedEvents = await getPersonEvents(person.id);
+      setEvents(loadedEvents);
+    } catch (error) {
+      console.error('Error loading events:', error);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // Combine database events with birth/death dates
+  const allEvents = useMemo(() => {
+    const combined: Array<PersonEvent & { isFromPerson?: boolean }> = [];
+    
+    // Add birth date as event if exists
+    if (person?.birthDate) {
+      combined.push({
+        id: `birth-${person.id}`,
+        person_id: person.id,
+        type: 'birth',
+        date_start: person.birthDate,
+        date_end: null,
+        place_name: null,
+        place_lat: null,
+        place_lng: null,
+        notes: null,
+        created_at: '',
+        updated_at: '',
+        isFromPerson: true,
+      } as PersonEvent & { isFromPerson: boolean });
+    }
+    
+    // Add death date as event if exists
+    if (person?.deathDate) {
+      combined.push({
+        id: `death-${person.id}`,
+        person_id: person.id,
+        type: 'death',
+        date_start: person.deathDate,
+        date_end: null,
+        place_name: null,
+        place_lat: null,
+        place_lng: null,
+        notes: null,
+        created_at: '',
+        updated_at: '',
+        isFromPerson: true,
+      } as PersonEvent & { isFromPerson: boolean });
+    }
+    
+    // Add database events
+    combined.push(...events.map(e => ({ ...e, isFromPerson: false })));
+    
+    // Sort by date
+    return combined.sort((a, b) => {
+      const dateA = a.date_start ? new Date(a.date_start).getTime() : 0;
+      const dateB = b.date_start ? new Date(b.date_start).getTime() : 0;
+      return dateA - dateB;
+    });
+  }, [person, events]);
+
+  const handleAddEvent = () => {
+    setEditingEvent(null);
+    setEventType('other');
+    setEventDateStart('');
+    setEventDateEnd('');
+    setEventPlace('');
+    setEventNotes('');
+    setShowAddEvent(true);
+  };
+
+  const handleEditEvent = (event: PersonEvent) => {
+    if ((event as any).isFromPerson) return; // Can't edit birth/death from person
+    setEditingEvent(event);
+    setEventType(event.type);
+    setEventDateStart(event.date_start || '');
+    setEventDateEnd(event.date_end || '');
+    setEventPlace(event.place_name || '');
+    setEventNotes(event.notes || '');
+    setShowAddEvent(true);
+  };
+
+  const handleDeleteEvent = async (event: PersonEvent) => {
+    if ((event as any).isFromPerson) return; // Can't delete birth/death from person
+    
+    if (!confirm(t('person.confirmDeleteEvent'))) {
+      return;
+    }
+
+    try {
+      setIsDeleting(true);
+      await deletePersonEvent(event.id);
+      await loadEvents();
+    } catch (error: any) {
+      showError('Erreur lors de la suppression: ' + (error.message || 'Erreur inconnue'));
+    } finally {
+      setIsDeleting(false);
+    }
+  };
+
+  const handleSaveEvent = async () => {
+    if (!person?.id) return;
+
+    try {
+      setIsSaving(true);
+      
+      if (editingEvent) {
+        await updatePersonEvent(
+          editingEvent.id,
+          eventType,
+          eventDateStart || null,
+          eventDateEnd || null,
+          eventPlace || null,
+          null,
+          null,
+          eventNotes || null
+        );
+      } else {
+        await createPersonEvent(
+          person.id,
+          eventType,
+          eventDateStart || null,
+          eventDateEnd || null,
+          eventPlace || null,
+          null,
+          null,
+          eventNotes || null
+        );
+      }
+      
+      await loadEvents();
+      setShowAddEvent(false);
+      setEditingEvent(null);
+    } catch (error: any) {
+      showError('Erreur lors de la sauvegarde: ' + (error.message || 'Erreur inconnue'));
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
+  if (loading) {
     return (
       <div className="empty-state">
-        <p>{t('person.noEvents') || 'Aucun événement'}</p>
+        <p>{t('common.loading')}</p>
       </div>
     );
   }
 
   return (
     <div className="tab-content-inner">
-      {details.events.map((event: any) => (
-        <div key={event.id} className="event-card">
-          <div className="event-header">
-            <span className="event-icon">
-              {event.type === 'birth' ? '🎂' : event.type === 'death' ? '🕯️' : event.type === 'marriage' ? '💍' : event.type === 'divorce' ? '💔' : '📅'}
-            </span>
-            <div className="event-info">
-              <h4 className="event-type">
-                {event.type === 'birth' ? t('person.birth') : event.type === 'death' ? t('person.death') : event.type === 'marriage' ? t('person.marriage') : event.type === 'divorce' ? t('person.divorce') : event.type}
-              </h4>
-              <p className="event-date">
-                {new Date(event.date).toLocaleDateString('fr-FR', {
-                  year: 'numeric',
-                  month: 'long',
-                  day: 'numeric',
-                })}
-              </p>
-              {event.place && <p className="event-place">📍 {event.place}</p>}
-              {event.description && <p className="event-description">{event.description}</p>}
-            </div>
+      {canEdit && (
+        <div style={{ marginBottom: '16px' }}>
+          <button onClick={handleAddEvent} className="btn btn-primary">
+            <PlusIcon className="icon-inline" />
+            {t('person.addEvent')}
+          </button>
+        </div>
+      )}
+
+      {showAddEvent && (
+        <div className="section-card" style={{ marginBottom: '16px' }}>
+          <h3 className="section-title">
+            {editingEvent ? t('person.editEvent') : t('person.addEvent')}
+          </h3>
+          <div className="form-group">
+            <label>{t('person.eventType')}</label>
+            <select
+              className="form-input"
+              value={eventType}
+              onChange={(e) => setEventType(e.target.value)}
+            >
+              <option value="birth">{t('person.birth')}</option>
+              <option value="death">{t('person.death')}</option>
+              <option value="marriage">{t('person.marriage')}</option>
+              <option value="divorce">{t('person.divorce')}</option>
+              <option value="baptism">Baptême</option>
+              <option value="graduation">Diplôme</option>
+              <option value="other">Autre</option>
+            </select>
+          </div>
+          <div className="form-group">
+            <label>{t('person.eventDate')}</label>
+            <input
+              type="date"
+              className="form-input"
+              value={eventDateStart}
+              onChange={(e) => setEventDateStart(e.target.value)}
+            />
+          </div>
+          <div className="form-group">
+            <label>{t('person.eventPlace')}</label>
+            <input
+              type="text"
+              className="form-input"
+              value={eventPlace}
+              onChange={(e) => setEventPlace(e.target.value)}
+              placeholder={t('person.eventPlace')}
+            />
+          </div>
+          <div className="form-group">
+            <label>{t('person.eventNotes')}</label>
+            <textarea
+              className="form-input notes-input"
+              value={eventNotes}
+              onChange={(e) => setEventNotes(e.target.value)}
+              placeholder={t('person.eventNotes')}
+              rows={3}
+            />
+          </div>
+          <div className="edit-buttons">
+            <button
+              onClick={() => {
+                setShowAddEvent(false);
+                setEditingEvent(null);
+              }}
+              className="btn btn-secondary"
+              disabled={isSaving}
+            >
+              {t('common.cancel')}
+            </button>
+            <button
+              onClick={handleSaveEvent}
+              className="btn btn-primary"
+              disabled={isSaving || !eventDateStart}
+            >
+              {isSaving ? t('common.saving') : t('common.save')}
+            </button>
           </div>
         </div>
-      ))}
+      )}
+
+      {allEvents.length === 0 ? (
+        <div className="empty-state">
+          <p>{t('person.noEvents')}</p>
+        </div>
+      ) : (
+        allEvents.map((event) => {
+          const isFromPerson = (event as any).isFromPerson;
+          const eventDate = event.date_start ? new Date(event.date_start) : null;
+          
+          return (
+            <div key={event.id} className="event-card">
+              <div className="event-header">
+                <span className="event-icon">
+                  {event.type === 'birth' ? '🎂' : event.type === 'death' ? '🕯️' : event.type === 'marriage' ? '💍' : event.type === 'divorce' ? '💔' : '📅'}
+                </span>
+                <div className="event-info" style={{ flex: 1 }}>
+                  <h4 className="event-type">
+                    {event.type === 'birth' ? t('person.birth') : 
+                     event.type === 'death' ? t('person.death') : 
+                     event.type === 'marriage' ? t('person.marriage') : 
+                     event.type === 'divorce' ? t('person.divorce') : 
+                     event.type}
+                  </h4>
+                  {eventDate && (
+                    <p className="event-date">
+                      {eventDate.toLocaleDateString('fr-FR', {
+                        year: 'numeric',
+                        month: 'long',
+                        day: 'numeric',
+                      })}
+                    </p>
+                  )}
+                  {event.place_name && (
+                    <p className="event-place">📍 {event.place_name}</p>
+                  )}
+                  {event.notes && (
+                    <p className="event-description">{event.notes}</p>
+                  )}
+                </div>
+                {canEdit && !isFromPerson && (
+                  <div style={{ display: 'flex', gap: '8px' }}>
+                    <button
+                      onClick={() => handleEditEvent(event)}
+                      className="btn btn-ghost btn-sm"
+                      title={t('person.editEvent')}
+                    >
+                      <PencilIcon className="icon-inline" />
+                    </button>
+                    <button
+                      onClick={() => handleDeleteEvent(event)}
+                      className="btn btn-ghost btn-sm"
+                      disabled={isDeleting}
+                      title={t('person.deleteEvent')}
+                    >
+                      <TrashIcon className="icon-inline" />
+                    </button>
+                  </div>
+                )}
+              </div>
+            </div>
+          );
+        })
+      )}
     </div>
   );
 };
@@ -967,10 +1345,13 @@ const MediaTab: React.FC<MediaTabProps> = ({ person, canEdit }) => {
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
-    loadMedia();
-  }, [person.id]);
+    if (person?.id) {
+      loadMedia();
+    }
+  }, [person?.id]);
 
   const loadMedia = async () => {
+    if (!person?.id) return;
     try {
       setLoading(true);
       const mediaList = await getPersonMedia(person.id);
@@ -988,13 +1369,13 @@ const MediaTab: React.FC<MediaTabProps> = ({ person, canEdit }) => {
 
     // Validate file type
     if (!file.type.startsWith('image/')) {
-      alert('Veuillez sélectionner une image');
+      showWarning('Veuillez sélectionner une image');
       return;
     }
 
     // Validate file size (max 10MB)
     if (file.size > 10 * 1024 * 1024) {
-      alert('La taille du fichier ne doit pas dépasser 10MB');
+      showWarning('La taille du fichier ne doit pas dépasser 10MB');
       return;
     }
 
@@ -1002,14 +1383,23 @@ const MediaTab: React.FC<MediaTabProps> = ({ person, canEdit }) => {
       setUploading(true);
       const newMedia = await uploadPersonMedia(person.id, file);
       if (newMedia) {
-        await loadMedia();
-        alert('Photo ajoutée avec succès');
+        // Reload media
+        try {
+          setLoading(true);
+          const mediaList = await getPersonMedia(person.id);
+          setMedia(mediaList);
+        } catch (error) {
+          console.error('Error reloading media:', error);
+        } finally {
+          setLoading(false);
+        }
+        showSuccess('Photo ajoutée avec succès');
       } else {
-        alert('Erreur lors de l\'ajout de la photo');
+        showError('Erreur lors de l\'ajout de la photo');
       }
     } catch (error: any) {
       console.error('Error uploading media:', error);
-      alert(`Erreur lors de l'ajout de la photo: ${error.message || 'Erreur inconnue'}`);
+      showError(`Erreur lors de l'ajout de la photo: ${error.message || 'Erreur inconnue'}`);
     } finally {
       setUploading(false);
       if (fileInputRef.current) {
@@ -1027,14 +1417,41 @@ const MediaTab: React.FC<MediaTabProps> = ({ person, canEdit }) => {
     try {
       const success = await deletePersonMedia(mediaId);
       if (success) {
-        await loadMedia();
-        alert('Photo supprimée avec succès');
+        // Reload media
+        try {
+          setLoading(true);
+          const mediaList = await getPersonMedia(person.id);
+          setMedia(mediaList);
+        } catch (error) {
+          console.error('Error reloading media:', error);
+        } finally {
+          setLoading(false);
+        }
+        showSuccess('Photo supprimée avec succès');
       } else {
-        alert('Erreur lors de la suppression de la photo');
+        showError('Erreur lors de la suppression de la photo');
       }
     } catch (error: any) {
       console.error('Error deleting media:', error);
-      alert(`Erreur lors de la suppression de la photo: ${error.message || 'Erreur inconnue'}`);
+      showError(`Erreur lors de la suppression de la photo: ${error.message || 'Erreur inconnue'}`);
+    }
+  };
+
+  const handleSetPrimary = async (mediaId: string) => {
+    if (!canEdit || !person?.id) return;
+
+    try {
+      const success = await setPrimaryPhoto(person.id, mediaId);
+      if (success) {
+        // Reload media to refresh the UI
+        await loadMedia();
+        showSuccess('Photo principale définie avec succès');
+      } else {
+        showError('Erreur lors de la définition de la photo principale');
+      }
+    } catch (error: any) {
+      console.error('Error setting primary photo:', error);
+      showError(`Erreur lors de la définition de la photo principale: ${error.message || 'Erreur inconnue'}`);
     }
   };
 
@@ -1083,7 +1500,11 @@ const MediaTab: React.FC<MediaTabProps> = ({ person, canEdit }) => {
             <MediaItem
               key={item.id}
               media={item}
+              personId={person.id}
+              canEdit={canEdit}
               onDelete={canEdit ? () => handleDeleteMedia(item.id) : undefined}
+              onSetPrimary={canEdit && !item.is_primary ? () => handleSetPrimary(item.id) : undefined}
+              onReload={loadMedia}
             />
           ))}
         </div>
@@ -1094,10 +1515,14 @@ const MediaTab: React.FC<MediaTabProps> = ({ person, canEdit }) => {
 
 interface MediaItemProps {
   media: PersonMedia;
+  personId: string;
+  canEdit: boolean;
   onDelete?: () => void;
+  onSetPrimary?: () => void;
+  onReload?: () => void;
 }
 
-const MediaItem: React.FC<MediaItemProps> = ({ media, onDelete }) => {
+const MediaItem: React.FC<MediaItemProps> = ({ media, onDelete, onSetPrimary, canEdit }) => {
   const [imageUrl, setImageUrl] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
 
@@ -1108,10 +1533,23 @@ const MediaItem: React.FC<MediaItemProps> = ({ media, onDelete }) => {
   const loadImageUrl = async () => {
     try {
       setLoading(true);
+      if (!media.storage_path) {
+        console.error('MediaItem: storage_path is missing for media:', media.id);
+        setImageUrl(null);
+        return;
+      }
+      console.log('MediaItem: Loading URL for storage_path:', media.storage_path);
       const url = await getPersonMediaUrl(media.storage_path);
-      setImageUrl(url);
+      if (url) {
+        console.log('MediaItem: Successfully loaded URL');
+        setImageUrl(url);
+      } else {
+        console.error('MediaItem: Failed to load URL for storage_path:', media.storage_path);
+        setImageUrl(null);
+      }
     } catch (error) {
-      console.error('Error loading media URL:', error);
+      console.error('MediaItem: Error loading media URL:', error);
+      setImageUrl(null);
     } finally {
       setLoading(false);
     }
@@ -1130,6 +1568,16 @@ const MediaItem: React.FC<MediaItemProps> = ({ media, onDelete }) => {
       {onDelete && (
         <button className="media-item-delete" onClick={onDelete} title="Supprimer">
           <XMarkIcon className="icon-inline" />
+        </button>
+      )}
+      {onSetPrimary && (
+        <button 
+          className="media-item-set-primary" 
+          onClick={onSetPrimary} 
+          title="Définir comme photo principale"
+        >
+          <StarIcon className="icon-inline" />
+          <span>Photo principale</span>
         </button>
       )}
       {media.is_primary && (
@@ -1238,13 +1686,13 @@ const RelativesTab: React.FC<RelativesTabProps> = ({
             updatePersonInStore(updatedPerson.id, updatedPerson);
           }
         }
-        alert('Relation retirée avec succès');
+        showSuccess('Relation retirée avec succès');
       } else {
-        alert('Erreur lors de la suppression de la relation');
+        showError('Erreur lors de la suppression de la relation');
       }
     } catch (error) {
       console.error('Error removing relative:', error);
-      alert('Erreur lors de la suppression de la relation');
+      showError('Erreur lors de la suppression de la relation');
     }
   };
 
@@ -1293,13 +1741,13 @@ const RelativesTab: React.FC<RelativesTabProps> = ({
           setIsVisible(newVisibility);
           // Update person in store
           updatePersonInStore(person.id, { isVisible: newVisibility });
-          alert(newVisibility ? 'Carte affichée dans l\'arbre' : 'Carte masquée dans l\'arbre');
+          showSuccess(newVisibility ? 'Carte affichée dans l\'arbre' : 'Carte masquée dans l\'arbre');
         } else {
-          alert('Erreur lors de la modification de la visibilité');
+          showError('Erreur lors de la modification de la visibilité');
         }
       } catch (error: any) {
         console.error('Error toggling visibility:', error);
-        alert(`Erreur lors de la modification de la visibilité: ${error.message || 'Erreur inconnue'}`);
+        showError(`Erreur lors de la modification de la visibilité: ${error.message || 'Erreur inconnue'}`);
       }
     };
 

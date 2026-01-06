@@ -7,6 +7,7 @@ import PersonDetailScreen from './screens/PersonDetailScreen';
 import SettingsScreen from './screens/SettingsScreen';
 import PrivacyPolicyScreen from './screens/PrivacyPolicyScreen';
 import AuthCallbackScreen from './screens/AuthCallbackScreen';
+import Toast from './components/Toast';
 import './App.css';
 
 function App() {
@@ -145,6 +146,7 @@ VITE_SUPABASE_ANON_KEY=your-anon-key-here`}
           element={<AuthCallbackScreen />} 
         />
       </Routes>
+      <Toast />
     </BrowserRouter>
   );
 }
