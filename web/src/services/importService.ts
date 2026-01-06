@@ -8,22 +8,15 @@ import {
   uploadPersonMedia,
   uploadPersonPhoto,
   setPrimaryPhoto,
-  getPersonTreeId,
   updatePerson,
   getUserTrees,
   Tree,
 } from './treeService';
 import {
   ExportData,
-  ExportPerson,
-  ExportContact,
-  ExportMedia,
-  ExportRelationship,
-  ExportPosition,
 } from './exportService';
 
 export interface ImportOptions {
-  mergeMode?: 'replace' | 'merge' | 'append'; // Mode de fusion
   skipDuplicates?: boolean; // Ignorer les doublons
   preservePositions?: boolean; // Préserver les positions
   importMedia?: boolean; // Importer les médias
@@ -66,7 +59,6 @@ export const importTreeFromJSON = async (
   options: ImportOptions = {}
 ): Promise<ImportResult> => {
   const {
-    mergeMode = 'append',
     skipDuplicates = false,
     preservePositions = true,
     importMedia = false,

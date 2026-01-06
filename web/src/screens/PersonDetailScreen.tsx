@@ -23,14 +23,12 @@ import {
   deletePersonMedia,
   setPrimaryPhoto,
   PersonMedia,
-  deletePersonContact,
   getPersonEvents,
   createPersonEvent,
   updatePersonEvent,
   deletePersonEvent,
   PersonEvent,
 } from '../services/treeService';
-import { SocialLink } from '../store/personDetailStore';
 import { supabase } from '../lib/supabase';
 import { AddRelativeModal } from '../components/AddRelativeModal';
 import { LinkExistingPersonModal } from '../components/LinkExistingPersonModal';
@@ -43,7 +41,6 @@ import {
   UserIcon,
   LinkIcon,
   StarIcon,
-  ArrowLeftIcon,
   HomeIcon,
   PlusIcon,
 } from '@heroicons/react/24/outline';
@@ -1522,7 +1519,7 @@ interface MediaItemProps {
   onReload?: () => void;
 }
 
-const MediaItem: React.FC<MediaItemProps> = ({ media, onDelete, onSetPrimary, canEdit }) => {
+const MediaItem: React.FC<MediaItemProps> = ({ media, onDelete, onSetPrimary, canEdit: _canEdit }) => {
   const [imageUrl, setImageUrl] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
 

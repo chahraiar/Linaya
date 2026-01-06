@@ -58,7 +58,6 @@ export const ImportTreeModal: React.FC<ImportTreeModalProps> = ({
       const importResult = await importTreeFromFile(file, targetTreeId, {
         importMedia,
         preservePositions,
-        mergeMode: targetTreeId ? 'append' : 'append',
         skipDuplicates: false,
       });
 

@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import { useTranslation } from 'react-i18next';
 import { SocialLink, SocialPlatform } from '../store/personDetailStore';
-import { getPersonContacts, upsertPersonContact, deletePersonContact, ContactDB } from '../services/treeService';
+import { getPersonContacts, upsertPersonContact, deletePersonContact } from '../services/treeService';
 import { SOCIAL_PLATFORMS, SOCIAL_PLATFORM_CONFIGS, getSocialPlatformConfig } from '../config/socialPlatforms';
 import { XMarkIcon, PlusIcon, LinkIcon } from '@heroicons/react/24/outline';
 import { showError } from '../utils/notifications';
@@ -42,7 +42,7 @@ const SocialLinksTab: React.FC<SocialLinksTabProps> = ({ personId, canEdit }) =>
           id: contact.id,
           platform: SOCIAL_PLATFORMS.includes(platform) ? platform : 'autre',
           url: contact.value,
-          label: contact.label,
+          label: contact.label || undefined,
         };
       });
       

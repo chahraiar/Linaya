@@ -6,10 +6,6 @@ import {
   getPersonMedia,
   getPersonMediaUrl,
   getPersonPositions,
-  PersonDB,
-  RelationshipDB,
-  ContactDB,
-  PersonMedia,
 } from './treeService';
 
 export interface ExportOptions {
